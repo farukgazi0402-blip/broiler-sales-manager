@@ -7,15 +7,17 @@
     <access origin="*" />
     <allow-intent href="http://*/*" />
     <allow-intent href="https://*/*" />
+    <allow-intent href="content://*/*" />
     <allow-intent href="intent:*" />
     <allow-intent href="whatsapp:*" />
+    <allow-intent href="com.google.android.apps.docs:*" />
     <preference name="SplashScreenDelay" value="1500" />
     <preference name="AutoHideSplashScreen" value="true" />
     <preference name="SplashMaintainAspectRatio" value="true" />
     <preference name="FadeSplashScreen" value="true" />
     <preference name="FadeSplashScreenDuration" value="300" />
     <preference name="AndroidWindowSplashScreenAnimatedIcon" value="splash.png" />
-    <preference name="AndroidWindowSplashScreenBackground" value="#FFFFFF" />
+    <preference name="AndroidWindowSplashScreenBackground" value="#047857" />
     <platform name="android">
         <allow-intent href="market:*" />
         <icon src="icon.png" />
