@@ -221,7 +221,6 @@
             <button onclick="switchTab('customers'); closeDrawerMenu();" class="w-full text-left px-4 py-3.5 hover:bg-emerald-800 hover:text-white rounded-xl flex items-center gap-3 transition">👥 Customers</button>
             <button onclick="switchTab('ledger'); closeDrawerMenu();" class="w-full text-left px-4 py-3.5 hover:bg-emerald-800 hover:text-white rounded-xl flex items-center gap-3 transition">📖 Ledger Book</button>
             <button onclick="switchTab('settings'); closeDrawerMenu();" class="w-full text-left px-4 py-3.5 hover:bg-emerald-800 hover:text-white rounded-xl flex items-center gap-3 transition border-t border-emerald-600 mt-4">⚙️ Settings</button>
-            <button onclick="closeDrawerMenu(); logoutCloudAccount();" class="w-full text-left px-4 py-3.5 hover:bg-rose-700 bg-rose-600/90 text-white rounded-xl flex items-center gap-3 transition">🚪 Logout</button>
         </div>
     </div>
 
@@ -582,6 +581,17 @@
                     <!-- Populated by JS -->
                 </div>
             </div>
+
+            <!-- Logout Section at Very Bottom of Settings -->
+            <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 flex items-center justify-between gap-3">
+                <div>
+                    <h2 class="text-sm md:text-base font-bold text-slate-800">Account Session</h2>
+                    <p class="text-xs text-slate-500">Sign out from your current account on this device.</p>
+                </div>
+                <button onclick="logoutCloudAccount()" class="bg-slate-800 hover:bg-slate-900 text-white px-5 py-2.5 rounded-xl text-xs font-bold shadow transition active:scale-95 whitespace-nowrap">
+                    🚪 Logout
+                </button>
+            </div>
         </section>
     </main>
 
@@ -823,6 +833,30 @@
         const statusEl = document.getElementById('cloud-auth-status');
 
         let lastSyncedSnapshot = "";
+        const NO_INTERNET_MSG = "No internet connection please check your internet connection";
+
+        function hasInternetConnection() {
+            if (typeof navigator !== "undefined" && navigator.onLine === false) {
+                return false;
+            }
+            if (window.cordova && navigator && navigator.connection && window.Connection) {
+                if (navigator.connection.type === window.Connection.NONE) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        function checkInternetOrAlert() {
+            if (!hasInternetConnection()) {
+                statusEl.textContent = NO_INTERNET_MSG;
+                if (typeof window.showToast === "function") {
+                    window.showToast(NO_INTERNET_MSG);
+                }
+                return false;
+            }
+            return true;
+        }
 
         function hideLoginScreenAndOpenMain() {
             if (authScreen) {
@@ -839,6 +873,9 @@
                 authScreen.classList.remove('hidden');
                 authScreen.style.display = 'flex';
             }
+            if (!hasInternetConnection()) {
+                statusEl.textContent = NO_INTERNET_MSG;
+            }
         }
 
         window.toggleAuthPasswordVisibility = function() {
@@ -851,7 +888,7 @@
 
         window.syncAppDataToFirestore = async function(dataObj, force = false) {
             const user = auth.currentUser;
-            if (!user || !dataObj) return;
+            if (!user || !dataObj || !hasInternetConnection()) return;
             try {
                 const payload = {
                     businessName: dataObj.businessName || 'Broiler & Ledger Pro',
@@ -859,7 +896,6 @@
                     gmailBackupId: dataObj.gmailBackupId || user.email || '',
                     lastBackupTime: dataObj.lastBackupTime || '',
                     deletePassword: dataObj.deletePassword !== undefined ? dataObj.deletePassword : '',
-                    profilePhoto: dataObj.profilePhoto || '',
                     customers: Array.isArray(dataObj.customers) ? dataObj.customers : [],
                     sales: Array.isArray(dataObj.sales) ? dataObj.sales : [],
                     payments: Array.isArray(dataObj.payments) ? dataObj.payments : [],
@@ -881,9 +917,15 @@
         };
 
         window.fetchAppDataFromFirestore = async function(uid) {
+            if (!hasInternetConnection()) {
+                if (typeof window.showToast === "function") {
+                    window.showToast(NO_INTERNET_MSG);
+                }
+                return null;
+            }
             try {
                 const docPromise = getDoc(doc(db, "users", uid));
-                const timeoutPromise = new Promise((resolve) => setTimeout(() => resolve(null), 6000));
+                const timeoutPromise = new Promise((resolve) => setTimeout(() => resolve(null), 8000));
                 const snap = await Promise.race([docPromise, timeoutPromise]);
                 if (snap && snap.exists()) {
                     const docData = snap.data();
@@ -903,15 +945,35 @@
             showLoginScreen();
         };
 
+        window.addEventListener("offline", () => {
+            if (authScreen && authScreen.style.display !== "none") {
+                statusEl.textContent = NO_INTERNET_MSG;
+            }
+            if (typeof window.showToast === "function") {
+                window.showToast(NO_INTERNET_MSG);
+            }
+        });
+
+        window.addEventListener("online", () => {
+            if (statusEl.textContent === NO_INTERNET_MSG) {
+                statusEl.textContent = "";
+            }
+        });
+
+        setTimeout(() => {
+            checkInternetOrAlert();
+        }, 1800);
+
         // Every-moment background auto-upload listener
         setInterval(() => {
-            if (auth.currentUser && typeof window.getCurrentAppData === 'function') {
+            if (auth.currentUser && hasInternetConnection() && typeof window.getCurrentAppData === 'function') {
                 const current = window.getCurrentAppData();
                 window.syncAppDataToFirestore(current, false);
             }
-        }, 5000);
+        }, 4000);
 
         document.getElementById('btn-cloud-login').addEventListener('click', async () => {
+            if (!checkInternetOrAlert()) return;
             const email = emailInput.value.trim();
             const password = passInput.value;
             if (!email || !password) {
@@ -928,11 +990,16 @@
                     window.applyCloudAppData(cloudData, cred.user.email);
                 }
             } catch (err) {
-                statusEl.textContent = "Invalid Email ID or Password.";
+                if (!hasInternetConnection()) {
+                    statusEl.textContent = NO_INTERNET_MSG;
+                } else {
+                    statusEl.textContent = "Invalid Email ID or Password.";
+                }
             }
         });
 
         document.getElementById('btn-cloud-register').addEventListener('click', async () => {
+            if (!checkInternetOrAlert()) return;
             const email = emailInput.value.trim();
             const password = passInput.value;
             if (!email || password.length < 6) {
@@ -951,7 +1018,9 @@
                     window.showToast("Account created successfully!");
                 }
             } catch (err) {
-                if (err.code === 'auth/email-already-in-use') {
+                if (!hasInternetConnection()) {
+                    statusEl.textContent = NO_INTERNET_MSG;
+                } else if (err.code === 'auth/email-already-in-use') {
                     statusEl.textContent = "Email ID and Password already exists";
                 } else {
                     statusEl.textContent = "Unable to create account. Please try again.";
@@ -1009,6 +1078,7 @@
         }
 
         window.applyCloudAppData = function(cloudData, userEmail) {
+            const existingLocalPhoto = appData.profilePhoto || '';
             if (cloudData) {
                 appData = {
                     businessName: cloudData.businessName || 'Broiler & Ledger Pro',
@@ -1016,7 +1086,7 @@
                     gmailBackupId: cloudData.gmailBackupId || userEmail || '',
                     lastBackupTime: cloudData.lastBackupTime || '',
                     deletePassword: cloudData.deletePassword !== undefined ? cloudData.deletePassword : '',
-                    profilePhoto: cloudData.profilePhoto || '',
+                    profilePhoto: cloudData.profilePhoto || existingLocalPhoto,
                     customers: Array.isArray(cloudData.customers) ? cloudData.customers : [],
                     sales: Array.isArray(cloudData.sales) ? cloudData.sales : [],
                     payments: Array.isArray(cloudData.payments) ? cloudData.payments : [],
