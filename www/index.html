@@ -259,11 +259,11 @@
     <div id="drawer-overlay" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 hidden transition-opacity duration-300" onclick="closeDrawerMenu()"></div>
     <div id="drawer-menu" class="fixed inset-y-0 left-0 w-64 bg-emerald-700 text-white z-50 shadow-2xl transform -translate-x-full transition-transform duration-300 flex flex-col">
         <div class="p-5 bg-emerald-800 text-white flex justify-between items-center border-b border-emerald-600">
-            <div class="flex items-center gap-3">
-                <div id="drawer-avatar-preview" class="w-11 h-11 rounded-full bg-emerald-600 border border-emerald-400 text-white font-bold flex items-center justify-center overflow-hidden text-sm shadow">👤</div>
-                <div class="overflow-hidden">
-                    <p id="drawer-user-greeting" class="text-[11px] font-semibold text-emerald-200 truncate">Hi, User</p>
-                    <p class="font-bold text-sm truncate" id="drawer-business-name-display">Broiler & Ledger Pro</p>
+            <div class="flex items-center gap-3 min-w-0 w-full">
+                <div id="drawer-avatar-preview" class="w-11 h-11 rounded-full bg-emerald-600 border border-emerald-400 text-white font-bold flex items-center justify-center overflow-hidden text-sm shadow shrink-0">👤</div>
+                <div class="min-w-0 flex-1">
+                    <p id="drawer-user-greeting" class="text-[11px] font-semibold text-emerald-200 break-words whitespace-normal leading-snug">Hi, User</p>
+                    <p class="font-bold text-sm break-words whitespace-normal leading-snug" id="drawer-business-name-display">Broiler & Ledger Pro</p>
                     <p class="text-[11px] text-emerald-200">Management Menu</p>
                 </div>
             </div>
@@ -869,7 +869,8 @@
             getFirestore,
             doc,
             setDoc,
-            getDoc
+            getDoc,
+            onSnapshot
         } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
 
         const firebaseConfig = {
@@ -894,6 +895,7 @@
         let lastSyncedSnapshot = "";
         let isCloudHydrated = false;
         let isLoadingFromCloud = false;
+        let unsubscribeUserDoc = null;
         const NO_INTERNET_MSG = "No internet connection please check your internet connection";
 
         function hasInternetConnection() {
@@ -946,6 +948,17 @@
             passInput.type = passInput.type === 'password' ? 'text' : 'password';
         };
 
+        function extractCloudPayloadFromDoc(docData) {
+            if (!docData) return null;
+            const appObj = docData.appData || (docData.records && typeof docData.records === 'object' ? docData.records : null);
+            if (!appObj) return null;
+            return {
+                ...appObj,
+                ownerName: appObj.ownerName || docData.ownerName || '',
+                profilePhoto: appObj.profilePhoto || docData.profilePhoto || ''
+            };
+        }
+
         window.syncAppDataToFirestore = async function(dataObj, force = false) {
             const user = auth.currentUser;
             if (!user || !dataObj || !isCloudHydrated || isLoadingFromCloud || !hasInternetConnection()) return;
@@ -957,6 +970,7 @@
                     gmailBackupId: dataObj.gmailBackupId || user.email || '',
                     lastBackupTime: dataObj.lastBackupTime || '',
                     deletePassword: dataObj.deletePassword !== undefined ? dataObj.deletePassword : '',
+                    profilePhoto: dataObj.profilePhoto || '',
                     customers: Array.isArray(dataObj.customers) ? dataObj.customers : [],
                     sales: Array.isArray(dataObj.sales) ? dataObj.sales : [],
                     payments: Array.isArray(dataObj.payments) ? dataObj.payments : [],
@@ -988,11 +1002,7 @@
             try {
                 const snap = await getDoc(doc(db, "users", uid));
                 if (snap && snap.exists()) {
-                    const docData = snap.data();
-                    const appObj = docData.appData || (docData.records && typeof docData.records === 'object' ? docData.records : null);
-                    if (appObj && !appObj.ownerName && docData.ownerName) {
-                        appObj.ownerName = docData.ownerName;
-                    }
+                    const appObj = extractCloudPayloadFromDoc(snap.data());
                     return { ok: true, data: appObj };
                 }
                 return { ok: true, data: null };
@@ -1001,6 +1011,45 @@
                 return { ok: false, data: null };
             }
         };
+
+        function startRealtimeUserListener(uid, userEmail) {
+            if (unsubscribeUserDoc) {
+                unsubscribeUserDoc();
+                unsubscribeUserDoc = null;
+            }
+            unsubscribeUserDoc = onSnapshot(doc(db, "users", uid), (snap) => {
+                if (!snap.exists() || isLoadingFromCloud) return;
+                const cloudPayload = extractCloudPayloadFromDoc(snap.data());
+                if (!cloudPayload) return;
+
+                const normalized = {
+                    ownerName: cloudPayload.ownerName || '',
+                    businessName: cloudPayload.businessName || 'Broiler & Ledger Pro',
+                    businessAddress: cloudPayload.businessAddress || 'Swarupnagar, North 24 Parganas',
+                    gmailBackupId: cloudPayload.gmailBackupId || userEmail || '',
+                    lastBackupTime: cloudPayload.lastBackupTime || '',
+                    deletePassword: cloudPayload.deletePassword !== undefined ? cloudPayload.deletePassword : '',
+                    profilePhoto: cloudPayload.profilePhoto || '',
+                    customers: Array.isArray(cloudPayload.customers) ? cloudPayload.customers : [],
+                    sales: Array.isArray(cloudPayload.sales) ? cloudPayload.sales : [],
+                    payments: Array.isArray(cloudPayload.payments) ? cloudPayload.payments : [],
+                    recycleBin: Array.isArray(cloudPayload.recycleBin) ? cloudPayload.recycleBin : []
+                };
+
+                const serialized = JSON.stringify(normalized);
+                if (serialized !== lastSyncedSnapshot && typeof window.applyCloudAppData === "function") {
+                    isLoadingFromCloud = true;
+                    try {
+                        window.applyCloudAppData(normalized, userEmail, true, true);
+                        lastSyncedSnapshot = serialized;
+                    } finally {
+                        isLoadingFromCloud = false;
+                    }
+                }
+            }, (err) => {
+                console.error("Realtime listener error:", err);
+            });
+        }
 
         async function hydrateFromCloudForUser(user, regProfile = null) {
             isLoadingFromCloud = true;
@@ -1018,9 +1067,10 @@
                     };
                 }
                 if (typeof window.applyCloudAppData === "function") {
-                    window.applyCloudAppData(finalData, user.email, Boolean(regProfile));
+                    window.applyCloudAppData(finalData, user.email, Boolean(regProfile), false);
                 }
                 isCloudHydrated = true;
+                startRealtimeUserListener(user.uid, user.email);
                 if (regProfile && hasInternetConnection()) {
                     await window.syncAppDataToFirestore(window.getCurrentAppData(), true);
                 }
@@ -1030,6 +1080,10 @@
         }
 
         window.logoutCloudAccount = async function() {
+            if (unsubscribeUserDoc) {
+                unsubscribeUserDoc();
+                unsubscribeUserDoc = null;
+            }
             isCloudHydrated = false;
             lastSyncedSnapshot = "";
             await signOut(auth);
@@ -1055,13 +1109,40 @@
             checkInternetOrAlert();
         }, 1800);
 
-        // Every-moment background auto-upload listener
-        setInterval(() => {
-            if (auth.currentUser && isCloudHydrated && !isLoadingFromCloud && hasInternetConnection() && typeof window.getCurrentAppData === 'function') {
-                const current = window.getCurrentAppData();
-                window.syncAppDataToFirestore(current, false);
+        // Every 5 seconds background auto-sync listener (upload + pull from other devices)
+        setInterval(async () => {
+            if (auth.currentUser && isCloudHydrated && !isLoadingFromCloud && hasInternetConnection()) {
+                if (typeof window.getCurrentAppData === 'function') {
+                    await window.syncAppDataToFirestore(window.getCurrentAppData(), false);
+                }
+                const res = await window.fetchAppDataFromFirestore(auth.currentUser.uid);
+                if (res && res.ok && res.data && typeof window.applyCloudAppData === 'function') {
+                    const normalized = {
+                        ownerName: res.data.ownerName || '',
+                        businessName: res.data.businessName || 'Broiler & Ledger Pro',
+                        businessAddress: res.data.businessAddress || 'Swarupnagar, North 24 Parganas',
+                        gmailBackupId: res.data.gmailBackupId || auth.currentUser.email || '',
+                        lastBackupTime: res.data.lastBackupTime || '',
+                        deletePassword: res.data.deletePassword !== undefined ? res.data.deletePassword : '',
+                        profilePhoto: res.data.profilePhoto || '',
+                        customers: Array.isArray(res.data.customers) ? res.data.customers : [],
+                        sales: Array.isArray(res.data.sales) ? res.data.sales : [],
+                        payments: Array.isArray(res.data.payments) ? res.data.payments : [],
+                        recycleBin: Array.isArray(res.data.recycleBin) ? res.data.recycleBin : []
+                    };
+                    const serialized = JSON.stringify(normalized);
+                    if (serialized !== lastSyncedSnapshot) {
+                        isLoadingFromCloud = true;
+                        try {
+                            window.applyCloudAppData(normalized, auth.currentUser.email, true, true);
+                            lastSyncedSnapshot = serialized;
+                        } finally {
+                            isLoadingFromCloud = false;
+                        }
+                    }
+                }
             }
-        }, 4000);
+        }, 5000);
 
         document.getElementById('btn-cloud-login').addEventListener('click', async () => {
             if (!checkInternetOrAlert()) return;
@@ -1138,6 +1219,10 @@
                 hideLoginScreenAndOpenMain();
                 await hydrateFromCloudForUser(user, null);
             } else {
+                if (unsubscribeUserDoc) {
+                    unsubscribeUserDoc();
+                    unsubscribeUserDoc = null;
+                }
                 isCloudHydrated = false;
                 showLoginScreen();
             }
@@ -1220,7 +1305,7 @@
             updateProfileAvatarUI();
         }
 
-        window.applyCloudAppData = function(cloudData, userEmail, skipSync = false) {
+        window.applyCloudAppData = function(cloudData, userEmail, skipSync = false, silentSync = false) {
             const existingLocalPhoto = appData.profilePhoto || '';
             if (cloudData) {
                 appData = {
@@ -1230,7 +1315,7 @@
                     gmailBackupId: cloudData.gmailBackupId || userEmail || '',
                     lastBackupTime: cloudData.lastBackupTime || '',
                     deletePassword: cloudData.deletePassword !== undefined ? cloudData.deletePassword : '',
-                    profilePhoto: cloudData.profilePhoto || existingLocalPhoto,
+                    profilePhoto: (cloudData.profilePhoto !== undefined && cloudData.profilePhoto !== null) ? cloudData.profilePhoto : existingLocalPhoto,
                     customers: Array.isArray(cloudData.customers) ? cloudData.customers : [],
                     sales: Array.isArray(cloudData.sales) ? cloudData.sales : [],
                     payments: Array.isArray(cloudData.payments) ? cloudData.payments : [],
@@ -1248,7 +1333,9 @@
             }
             hydrateSettingsInputs();
             renderAll();
-            showToast('Cloud data synced & loaded!');
+            if (!silentSync) {
+                showToast('Cloud data synced & loaded!');
+            }
         };
 
         window.onload = function() {
@@ -1272,8 +1359,12 @@
             const box = document.getElementById('splash-logo-box');
             const brandText = document.getElementById('splash-brand-text');
             if (brandText) brandText.innerText = appData.businessName || 'Broiler & Ledger Pro';
-            if (box && appData.profilePhoto) {
-                box.innerHTML = `<img src="${appData.profilePhoto}" alt="Logo" class="w-full h-full object-cover">`;
+            if (box) {
+                if (appData.profilePhoto) {
+                    box.innerHTML = `<img src="${appData.profilePhoto}" alt="Logo" class="w-full h-full object-cover">`;
+                } else {
+                    box.innerHTML = `<span id="splash-default-icon" class="text-5xl">🐔</span>`;
+                }
             }
         }
 
@@ -1321,16 +1412,16 @@
             }
         }
 
-        // Cordova PDF Save, Open in Google Drive & Share Helper
+        // Cordova PDF Save, Open in Google Drive & Share Helper (High-DPI Sharpness for Zooming)
         function saveAndSharePDF(printDiv, filename, successMsg) {
             const safeFilename = filename.toLowerCase().endsWith('.pdf') ? filename : `${filename}.pdf`;
             document.body.appendChild(printDiv);
             const opt = {
                 margin:       [0.2, 0.2, 0.2, 0.2],
                 filename:     safeFilename,
-                image:        { type: 'jpeg', quality: 0.98 },
-                html2canvas:  { scale: 2, useCORS: true, letterRendering: true },
-                jsPDF:        { unit: 'in', format: 'a4', orientation: 'portrait', compress: true }
+                image:        { type: 'png', quality: 1.0 },
+                html2canvas:  { scale: 4, useCORS: true, letterRendering: true, dpi: 300 },
+                jsPDF:        { unit: 'in', format: 'a4', orientation: 'portrait', compress: false, precision: 16 }
             };
 
             const isCordova = !!(window.cordova && window.cordova.file && window.resolveLocalFileSystemURL);
@@ -3083,7 +3174,7 @@
 
             wrapper.innerHTML = `
                 <div class="space-y-4 text-sm">
-                    <div class="border-b pb-3 flex justify-end">
+                    <div class="ledger-customer-header border-b pb-3 flex justify-end">
                         <div class="text-right">
                             <p class="font-bold text-slate-900 text-base">${c.name}</p>
                             <p class="text-xs text-slate-600">Phone: ${c.phone}</p>
@@ -3197,7 +3288,7 @@
             if (petrolBox && petrolBox.closest('.bg-amber-50')) {
                 petrolBox.closest('.bg-amber-50').remove();
             }
-            const innerHeader = printDiv.querySelector('#ledger-pdf-wrapper > div > div.border-b');
+            const innerHeader = printDiv.querySelector('.ledger-customer-header');
             if (innerHeader) innerHeader.remove();
 
             saveAndSharePDF(printDiv, `Ledger_Statement_${customerName}.pdf`, 'Customer Ledger PDF ready!');
