@@ -110,13 +110,13 @@
 </head>
 <body class="bg-slate-100 text-slate-800 h-full flex flex-col antialiased selection:bg-emerald-500 selection:text-white">
 
-    <!-- Cloud Email/Password Login Screen -->
+    <!-- Cloud Email/Password Login Screen (English + Eye Icon) -->
     <div id="cloud-auth-screen" class="hidden">
         <div class="bg-white w-full max-w-sm rounded-2xl shadow-2xl p-6 space-y-4 text-xs">
             <div class="text-center space-y-1">
                 <div class="text-4xl">🐔</div>
                 <h2 class="text-lg font-bold text-slate-800">Broiler & Ledger Pro</h2>
-                <p class="text-slate-500">ইমেইল ও পাসওয়ার্ড দিয়ে লগইন করলে আপনার সব ডাটা অটোমেটিক চলে আসবে</p>
+                <p class="text-slate-500">Sign in with your Email ID and Password to automatically load your data</p>
             </div>
 
             <div class="space-y-3">
@@ -126,7 +126,10 @@
                 </div>
                 <div>
                     <label class="block font-semibold text-slate-600 mb-1">Password*</label>
-                    <input type="password" id="cloud-auth-password" placeholder="কমপক্ষে ৬ অক্ষরের পাসওয়ার্ড" class="w-full border border-slate-300 rounded-xl px-3 py-2.5 text-xs focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+                    <div class="relative">
+                        <input type="password" id="cloud-auth-password" placeholder="At least 6 characters" class="w-full border border-slate-300 rounded-xl px-3 py-2.5 pr-10 text-xs focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+                        <button type="button" id="btn-toggle-auth-password" onclick="toggleAuthPasswordVisibility()" class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 text-sm focus:outline-none" title="Show/Hide Password">👁️</button>
+                    </div>
                 </div>
             </div>
 
@@ -805,13 +808,13 @@
         } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
 
         const firebaseConfig = {
-            apiKey: "AIzaSyCiR1-SkyFGvxMJAQfkiod6zpDaN4Kb3uI",
+            apiKey: "AIzaSyCiX1-5kyPGxaM3AQfkimd6zpDaN4Kb3uI",
             authDomain: "daily-sales-manager-ccc08.firebaseapp.com",
             projectId: "daily-sales-manager-ccc08",
             storageBucket: "daily-sales-manager-ccc08.firebasestorage.app",
             messagingSenderId: "1045936662620",
-            appId: "1:1045936662620:web:7d67599fb456d7cd39de99",
-            measurementId: "G-QTZ4BZAHY3"
+            appId: "1:1045936662620:web:fd67599fb456d7cd39de99",
+            measurementId: "G-QTZ6BZ0HT3"
         };
 
         const app = initializeApp(firebaseConfig);
@@ -822,6 +825,14 @@
         const emailInput = document.getElementById('cloud-auth-email');
         const passInput = document.getElementById('cloud-auth-password');
         const statusEl = document.getElementById('cloud-auth-status');
+
+        window.toggleAuthPasswordVisibility = function() {
+            if (passInput.type === 'password') {
+                passInput.type = 'text';
+            } else {
+                passInput.type = 'password';
+            }
+        };
 
         window.syncAppDataToFirestore = async function(dataObj) {
             const user = auth.currentUser;
@@ -858,15 +869,15 @@
             const email = emailInput.value.trim();
             const password = passInput.value;
             if (!email || !password) {
-                statusEl.textContent = "ইমেইল এবং পাসওয়ার্ড লিখুন।";
+                statusEl.textContent = "Please enter Email ID and Password.";
                 return;
             }
-            statusEl.textContent = "লগইন ও ডাটা লোড হচ্ছে...";
+            statusEl.textContent = "Logging in & loading data...";
             try {
                 await signInWithEmailAndPassword(auth, email, password);
                 statusEl.textContent = "";
             } catch (err) {
-                statusEl.textContent = "লগইন ব্যর্থ: " + err.message;
+                statusEl.textContent = "Login failed: " + err.message;
             }
         });
 
@@ -874,18 +885,18 @@
             const email = emailInput.value.trim();
             const password = passInput.value;
             if (!email || password.length < 6) {
-                statusEl.textContent = "সঠিক ইমেইল এবং কমপক্ষে ৬ অক্ষরের পাসওয়ার্ড দিন।";
+                statusEl.textContent = "Enter a valid Email ID and password (min 6 chars).";
                 return;
             }
-            statusEl.textContent = "অ্যাকাউন্ট তৈরি হচ্ছে...";
+            statusEl.textContent = "Creating account...";
             try {
                 await createUserWithEmailAndPassword(auth, email, password);
                 statusEl.textContent = "";
                 if (typeof window.showToast === "function") {
-                    window.showToast("অ্যাকাউন্ট সফলভাবে তৈরি হয়েছে!");
+                    window.showToast("Account created successfully!");
                 }
             } catch (err) {
-                statusEl.textContent = "রেজিস্ট্রেশন ব্যর্থ: " + err.message;
+                statusEl.textContent = "Registration failed: " + err.message;
             }
         });
 
