@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Broiler & Ledger Pro - Sales & Customer Management</title>
+    <!-- Cordova Bridge (Required for APK plugins) -->
+    <script src="cordova.js"></script>
     <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- html2pdf CDN -->
@@ -705,16 +707,76 @@
             startLiveClock();
         };
 
+        // Cordova PDF Save & Share Helper
+        function saveAndSharePDF(printDiv, filename, successMsg) {
+            document.body.appendChild(printDiv);
+            const opt = {
+                margin:       [0.2, 0.2, 0.2, 0.2],
+                filename:     filename,
+                image:        { type: 'jpeg', quality: 0.98 },
+                html2canvas:  { scale: 2, useCORS: true, letterRendering: true },
+                jsPDF:        { unit: 'in', format: 'a4', orientation: 'portrait', compress: true }
+            };
+
+            const isCordova = !!(window.cordova && window.cordova.file && window.resolveLocalFileSystemURL);
+
+            if (!isCordova) {
+                html2pdf().from(printDiv).set(opt).save().then(() => {
+                    if (printDiv.parentNode) document.body.removeChild(printDiv);
+                    showToast(successMsg);
+                }).catch((err) => {
+                    console.error('PDF error:', err);
+                    if (printDiv.parentNode) document.body.removeChild(printDiv);
+                    showToast('Failed to generate PDF!');
+                });
+                return;
+            }
+
+            html2pdf().from(printDiv).set(opt).outputPdf('blob').then((pdfBlob) => {
+                if (printDiv.parentNode) document.body.removeChild(printDiv);
+
+                const targetDir = window.cordova.file.externalDataDirectory || window.cordova.file.dataDirectory;
+                window.resolveLocalFileSystemURL(targetDir, function(dirEntry) {
+                    dirEntry.getFile(filename, { create: true, exclusive: false }, function(fileEntry) {
+                        fileEntry.createWriter(function(fileWriter) {
+                            fileWriter.onwriteend = function() {
+                                showToast(successMsg);
+                                if (window.plugins && window.plugins.socialsharing && typeof window.plugins.socialsharing.share === 'function') {
+                                    window.plugins.socialsharing.share(null, filename, fileEntry.nativeURL, null);
+                                }
+                            };
+                            fileWriter.onerror = function(e) {
+                                console.error('FileWriter error:', e);
+                                showToast('Error saving PDF file on device!');
+                            };
+                            fileWriter.write(pdfBlob);
+                        }, function(err) {
+                            console.error('createWriter error:', err);
+                            showToast('Cannot write PDF file!');
+                        });
+                    }, function(err) {
+                        console.error('getFile error:', err);
+                        showToast('Cannot create PDF file!');
+                    });
+                }, function(err) {
+                    console.error('resolveLocalFileSystemURL error:', err);
+                    showToast('Storage directory unavailable!');
+                });
+            }).catch((err) => {
+                console.error('html2pdf blob error:', err);
+                if (printDiv.parentNode) document.body.removeChild(printDiv);
+                showToast('Failed to generate PDF!');
+            });
+        }
+
         function startLiveClock() {
             function updateClock() {
                 const now = new Date();
-                // Date format DD/MM/YYYY
                 const day = String(now.getDate()).padStart(2, '0');
                 const month = String(now.getMonth() + 1).padStart(2, '0');
                 const year = now.getFullYear();
                 document.getElementById('header-current-date').innerText = `${day}/${month}/${year}`;
 
-                // Live Clock 12-hour format with AM/PM
                 let hours = now.getHours();
                 const minutes = String(now.getMinutes()).padStart(2, '0');
                 const seconds = String(now.getSeconds()).padStart(2, '0');
@@ -791,7 +853,7 @@
                 if (timer) clearTimeout(timer);
                 timer = setTimeout(() => {
                     callback();
-                }, 1000); // 1 Second long press
+                }, 1000);
             };
             const cancelPress = () => {
                 if (timer) clearTimeout(timer);
@@ -1218,7 +1280,6 @@
             document.getElementById('sale-modal').classList.add('hidden');
         }
 
-        // Edit Sale with Password Protection
         function promptEditSale(id) {
             const pwd = appData.deletePassword ? appData.deletePassword.trim() : '';
             if (pwd === '') {
@@ -1389,7 +1450,6 @@
             showToast('Selected items moved to Recycle Bin.');
         }
 
-        // Recycle Bin with Long-Press Multi-Select & Action Bar
         function renderRecycleBin() {
             const container = document.getElementById('recycle-bin-container');
             if (!container) return;
@@ -1731,18 +1791,7 @@
                 </table>
             `;
 
-            document.body.appendChild(printDiv);
-            const opt = {
-                margin:       [0.2, 0.2, 0.2, 0.2],
-                filename:     `Sales_Report_${startDate}_to_${endDate}.pdf`,
-                image:        { type: 'jpeg', quality: 0.98 },
-                html2canvas:  { scale: 2, useCORS: true, letterRendering: true },
-                jsPDF:        { unit: 'in', format: 'a4', orientation: 'portrait', compress: true }
-            };
-            html2pdf().from(printDiv).set(opt).save().then(() => {
-                document.body.removeChild(printDiv);
-                showToast('Sales Report PDF downloaded!');
-            });
+            saveAndSharePDF(printDiv, `Sales_Report_${startDate}_to_${endDate}.pdf`, 'Sales Report PDF ready!');
         }
 
         function downloadFilteredSalesPDF() {
@@ -1826,18 +1875,7 @@
                 </table>
             `;
 
-            document.body.appendChild(printDiv);
-            const opt = {
-                margin:       [0.2, 0.2, 0.2, 0.2],
-                filename:     `Filtered_Sales_Report.pdf`,
-                image:        { type: 'jpeg', quality: 0.98 },
-                html2canvas:  { scale: 2, useCORS: true },
-                jsPDF:        { unit: 'in', format: 'a4', orientation: 'portrait' }
-            };
-            html2pdf().from(printDiv).set(opt).save().then(() => {
-                document.body.removeChild(printDiv);
-                showToast('Filtered Sales PDF downloaded!');
-            });
+            saveAndSharePDF(printDiv, 'Filtered_Sales_Report.pdf', 'Filtered Sales PDF ready!');
         }
 
         function openCustomerModal(id = null) {
@@ -2260,7 +2298,6 @@
 
             wrapper.innerHTML = `
                 <div class="space-y-4 text-sm">
-                    <!-- Customer Details Header (Shown ONCE only) -->
                     <div class="border-b pb-3 flex justify-end">
                         <div class="text-right">
                             <p class="font-bold text-slate-900 text-base">${c.name}</p>
@@ -2269,7 +2306,6 @@
                         </div>
                     </div>
 
-                    <!-- Summary Cards & Advance Withdrawal Option -->
                     <div class="space-y-2">
                         <div class="flex justify-between items-center bg-blue-50 border border-blue-200 text-blue-900 p-3 rounded-xl font-semibold">
                             <span>Total Purchases:</span>
@@ -2379,18 +2415,7 @@
             const innerHeader = printDiv.querySelector('#ledger-pdf-wrapper > div > div.border-b');
             if (innerHeader) innerHeader.remove();
 
-            document.body.appendChild(printDiv);
-            const opt = {
-                margin:       [0.2, 0.2, 0.2, 0.2],
-                filename:     `Ledger_Statement_${customerName}.pdf`,
-                image:        { type: 'jpeg', quality: 0.98 },
-                html2canvas:  { scale: 2, useCORS: true, letterRendering: true },
-                jsPDF:        { unit: 'in', format: 'a4', orientation: 'portrait', compress: true }
-            };
-            html2pdf().from(printDiv).set(opt).save().then(() => {
-                document.body.removeChild(printDiv);
-                showToast('Customer Ledger PDF downloaded!');
-            });
+            saveAndSharePDF(printDiv, `Ledger_Statement_${customerName}.pdf`, 'Customer Ledger PDF ready!');
         }
 
         function exportTXTBackup() {
