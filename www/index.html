@@ -94,9 +94,54 @@
                 pointer-events: none;
             }
         }
+
+        /* Cloud Login Overlay */
+        #cloud-auth-screen {
+            position: fixed;
+            inset: 0;
+            background: #064e3b;
+            z-index: 9990;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 16px;
+        }
     </style>
 </head>
 <body class="bg-slate-100 text-slate-800 h-full flex flex-col antialiased selection:bg-emerald-500 selection:text-white">
+
+    <!-- Cloud Email/Password Login Screen -->
+    <div id="cloud-auth-screen" class="hidden">
+        <div class="bg-white w-full max-w-sm rounded-2xl shadow-2xl p-6 space-y-4 text-xs">
+            <div class="text-center space-y-1">
+                <div class="text-4xl">🐔</div>
+                <h2 class="text-lg font-bold text-slate-800">Broiler & Ledger Pro</h2>
+                <p class="text-slate-500">ইমেইল ও পাসওয়ার্ড দিয়ে লগইন করলে আপনার সব ডাটা অটোমেটিক চলে আসবে</p>
+            </div>
+
+            <div class="space-y-3">
+                <div>
+                    <label class="block font-semibold text-slate-600 mb-1">Email ID*</label>
+                    <input type="email" id="cloud-auth-email" placeholder="example@gmail.com" class="w-full border border-slate-300 rounded-xl px-3 py-2.5 text-xs focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+                </div>
+                <div>
+                    <label class="block font-semibold text-slate-600 mb-1">Password*</label>
+                    <input type="password" id="cloud-auth-password" placeholder="কমপক্ষে ৬ অক্ষরের পাসওয়ার্ড" class="w-full border border-slate-300 rounded-xl px-3 py-2.5 text-xs focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+                </div>
+            </div>
+
+            <div class="space-y-2 pt-1">
+                <button type="button" id="btn-cloud-login" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-2.5 rounded-xl font-bold shadow transition active:scale-95">
+                    🔐 Login & Load Data
+                </button>
+                <button type="button" id="btn-cloud-register" class="w-full bg-blue-600 hover:bg-blue-700 text-white py-2.5 rounded-xl font-bold shadow transition active:scale-95">
+                    ➕ Create New Account
+                </button>
+            </div>
+
+            <p id="cloud-auth-status" class="text-center font-semibold text-rose-600 min-h-[18px]"></p>
+        </div>
+    </div>
 
     <!-- 2-Second Animated Splash Screen -->
     <div id="splash-screen">
@@ -476,8 +521,8 @@
             <!-- Gmail Backup & Sync Settings -->
             <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 space-y-4">
                 <div>
-                    <h2 class="text-base md:text-lg font-bold text-slate-800">Gmail Backup & Sync (Auto & Restore)</h2>
-                    <p class="text-xs text-slate-500">Link your Gmail to automatically sync entries and restore data on new devices.</p>
+                    <h2 class="text-base md:text-lg font-bold text-slate-800">Cloud Sync & Account</h2>
+                    <p class="text-xs text-slate-500">Logged-in account syncs automatically to Cloud Firestore. Re-login with same email & password on any device to restore all data.</p>
                 </div>
                 <div class="space-y-3">
                     <div>
@@ -498,10 +543,15 @@
                             <button onclick="triggerManualBackup()" class="flex-1 sm:flex-none bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl font-semibold shadow transition">
                                 ☁️ Manual Backup Now
                             </button>
-                            <button onclick="triggerGmailRestore()" class="flex-1 sm:flex-none bg-amber-600 hover:bg-amber-700 text-white px-4 py-2 rounded-xl font-semibold shadow transition" title="Restore data from linked Gmail">
+                            <button onclick="triggerGmailRestore()" class="flex-1 sm:flex-none bg-amber-600 hover:bg-amber-700 text-white px-4 py-2 rounded-xl font-semibold shadow transition" title="Restore data from cloud">
                                 🔄 Restore Data
                             </button>
                         </div>
+                    </div>
+                    <div class="pt-2 flex justify-end">
+                        <button onclick="logoutCloudAccount()" class="bg-rose-600 hover:bg-rose-700 text-white px-4 py-2 rounded-xl text-xs font-bold shadow transition">
+                            🚪 Logout Account
+                        </button>
                     </div>
                 </div>
             </div>
@@ -737,6 +787,121 @@
         <span id="toast-msg">Success!</span>
     </div>
 
+    <!-- Firebase Authentication & Cloud Firestore Sync -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
+        import {
+            getAuth,
+            createUserWithEmailAndPassword,
+            signInWithEmailAndPassword,
+            onAuthStateChanged,
+            signOut
+        } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
+        import {
+            getFirestore,
+            doc,
+            setDoc,
+            getDoc
+        } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyCiR1-SkyFGvxMJAQfkiod6zpDaN4Kb3uI",
+            authDomain: "daily-sales-manager-ccc08.firebaseapp.com",
+            projectId: "daily-sales-manager-ccc08",
+            storageBucket: "daily-sales-manager-ccc08.firebasestorage.app",
+            messagingSenderId: "1045936662620",
+            appId: "1:1045936662620:web:7d67599fb456d7cd39de99",
+            measurementId: "G-QTZ4BZAHY3"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        const authScreen = document.getElementById('cloud-auth-screen');
+        const emailInput = document.getElementById('cloud-auth-email');
+        const passInput = document.getElementById('cloud-auth-password');
+        const statusEl = document.getElementById('cloud-auth-status');
+
+        window.syncAppDataToFirestore = async function(dataObj) {
+            const user = auth.currentUser;
+            if (!user) return;
+            try {
+                await setDoc(doc(db, "users", user.uid), {
+                    email: user.email,
+                    appData: dataObj,
+                    updatedAt: new Date().toISOString()
+                }, { merge: true });
+            } catch (err) {
+                console.error("Firestore sync error:", err);
+            }
+        };
+
+        window.fetchAppDataFromFirestore = async function(uid) {
+            try {
+                const snap = await getDoc(doc(db, "users", uid));
+                if (snap.exists() && snap.data().appData) {
+                    return snap.data().appData;
+                }
+                return null;
+            } catch (err) {
+                console.error("Firestore fetch error:", err);
+                return null;
+            }
+        };
+
+        window.logoutCloudAccount = async function() {
+            await signOut(auth);
+        };
+
+        document.getElementById('btn-cloud-login').addEventListener('click', async () => {
+            const email = emailInput.value.trim();
+            const password = passInput.value;
+            if (!email || !password) {
+                statusEl.textContent = "ইমেইল এবং পাসওয়ার্ড লিখুন।";
+                return;
+            }
+            statusEl.textContent = "লগইন ও ডাটা লোড হচ্ছে...";
+            try {
+                await signInWithEmailAndPassword(auth, email, password);
+                statusEl.textContent = "";
+            } catch (err) {
+                statusEl.textContent = "লগইন ব্যর্থ: " + err.message;
+            }
+        });
+
+        document.getElementById('btn-cloud-register').addEventListener('click', async () => {
+            const email = emailInput.value.trim();
+            const password = passInput.value;
+            if (!email || password.length < 6) {
+                statusEl.textContent = "সঠিক ইমেইল এবং কমপক্ষে ৬ অক্ষরের পাসওয়ার্ড দিন।";
+                return;
+            }
+            statusEl.textContent = "অ্যাকাউন্ট তৈরি হচ্ছে...";
+            try {
+                await createUserWithEmailAndPassword(auth, email, password);
+                statusEl.textContent = "";
+                if (typeof window.showToast === "function") {
+                    window.showToast("অ্যাকাউন্ট সফলভাবে তৈরি হয়েছে!");
+                }
+            } catch (err) {
+                statusEl.textContent = "রেজিস্ট্রেশন ব্যর্থ: " + err.message;
+            }
+        });
+
+        onAuthStateChanged(auth, async (user) => {
+            if (user) {
+                authScreen.classList.add('hidden');
+                const cloudData = await window.fetchAppDataFromFirestore(user.uid);
+                if (typeof window.applyCloudAppData === "function") {
+                    window.applyCloudAppData(cloudData, user.email);
+                }
+            } else {
+                authScreen.classList.remove('hidden');
+            }
+        });
+    </script>
+
     <!-- JavaScript Application Logic -->
     <script>
         let appData = {
@@ -758,6 +923,43 @@
         let selectedTransactionIds = new Set();
         let selectedBinIds = new Set();
 
+        function hydrateSettingsInputs() {
+            document.getElementById('settings-business-name').value = appData.businessName || 'Broiler & Ledger Pro';
+            document.getElementById('settings-business-address').value = appData.businessAddress || '';
+            document.getElementById('settings-gmail-id').value = appData.gmailBackupId || '';
+            document.getElementById('settings-delete-password').value = appData.deletePassword || '';
+            updateLastBackupUI();
+            updateBusinessNameUI();
+            updateProfileAvatarUI();
+        }
+
+        window.applyCloudAppData = function(cloudData, userEmail) {
+            if (cloudData) {
+                appData = {
+                    businessName: cloudData.businessName || 'Broiler & Ledger Pro',
+                    businessAddress: cloudData.businessAddress || 'Swarupnagar, North 24 Parganas',
+                    gmailBackupId: cloudData.gmailBackupId || userEmail || '',
+                    lastBackupTime: cloudData.lastBackupTime || '',
+                    deletePassword: cloudData.deletePassword !== undefined ? cloudData.deletePassword : '',
+                    profilePhoto: cloudData.profilePhoto || '',
+                    customers: cloudData.customers || [],
+                    sales: cloudData.sales || [],
+                    payments: cloudData.payments || [],
+                    recycleBin: cloudData.recycleBin || []
+                };
+                localStorage.setItem('broiler_pro_app_data', JSON.stringify(appData));
+            } else {
+                loadFromLocalStorage();
+                if (!appData.gmailBackupId && userEmail) {
+                    appData.gmailBackupId = userEmail;
+                }
+                saveToLocalStorage();
+            }
+            hydrateSettingsInputs();
+            renderAll();
+            showToast('Cloud data loaded automatically!');
+        };
+
         window.onload = function() {
             loadFromLocalStorage();
             updateSplashLogoUI();
@@ -767,13 +969,7 @@
             document.getElementById('pay-date').value = today;
             document.getElementById('daily-start-date').value = today;
             document.getElementById('daily-end-date').value = today;
-            document.getElementById('settings-business-name').value = appData.businessName || 'Broiler & Ledger Pro';
-            document.getElementById('settings-business-address').value = appData.businessAddress || '';
-            document.getElementById('settings-gmail-id').value = appData.gmailBackupId || '';
-            document.getElementById('settings-delete-password').value = appData.deletePassword || '';
-            updateLastBackupUI();
-            updateBusinessNameUI();
-            updateProfileAvatarUI();
+            hydrateSettingsInputs();
             
             switchTab('dashboard', true);
             renderAll();
@@ -1069,6 +1265,9 @@
         function saveToLocalStorage() {
             localStorage.setItem('broiler_pro_app_data', JSON.stringify(appData));
             triggerAutoGmailBackup();
+            if (typeof window.syncAppDataToFirestore === 'function') {
+                window.syncAppDataToFirestore(appData);
+            }
         }
 
         function loadFromLocalStorage() {
@@ -1104,7 +1303,7 @@
                     payments: [],
                     recycleBin: []
                 };
-                saveToLocalStorage();
+                localStorage.setItem('broiler_pro_app_data', JSON.stringify(appData));
             }
         }
 
@@ -1188,11 +1387,13 @@
             }
             appData.gmailBackupId = email;
             triggerAutoGmailBackup();
+            if (typeof window.syncAppDataToFirestore === 'function') {
+                window.syncAppDataToFirestore(appData);
+            }
             showToast('Gmail backup account linked successfully!');
         }
 
         function triggerAutoGmailBackup() {
-            if (!appData.gmailBackupId) return;
             const now = new Date();
             const timeStr = now.toLocaleDateString() + ' ' + now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
             appData.lastBackupTime = timeStr;
@@ -1201,32 +1402,30 @@
         }
 
         function triggerManualBackup() {
-            const email = appData.gmailBackupId || document.getElementById('settings-gmail-id').value.trim();
-            if (!email) {
-                showToast('Please enter & save your Gmail ID first!');
-                return;
-            }
             triggerAutoGmailBackup();
-            showToast(`Data successfully synced to ${email} with second precision!`);
+            if (typeof window.syncAppDataToFirestore === 'function') {
+                window.syncAppDataToFirestore(appData);
+            }
+            showToast(`Data synced to Cloud Firestore with second precision!`);
         }
 
         function triggerGmailRestore() {
-            const email = appData.gmailBackupId;
-            if (!email) {
-                showToast('No Gmail ID linked for restore.');
-                return;
-            }
-            openConfirmModal(`Do you want to restore all data linked with ${email}?`, () => {
+            openConfirmModal(`Do you want to restore all data from Cloud Firestore?`, async () => {
+                if (typeof window.fetchAppDataFromFirestore === 'function') {
+                    const authModule = await import("https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js");
+                    const user = authModule.getAuth().currentUser;
+                    if (user) {
+                        const cloudData = await window.fetchAppDataFromFirestore(user.uid);
+                        if (cloudData) {
+                            window.applyCloudAppData(cloudData, user.email);
+                            return;
+                        }
+                    }
+                }
                 loadFromLocalStorage();
-                updateBusinessNameUI();
-                updateProfileAvatarUI();
-                document.getElementById('settings-business-name').value = appData.businessName;
-                document.getElementById('settings-business-address').value = appData.businessAddress;
-                document.getElementById('settings-gmail-id').value = appData.gmailBackupId;
-                document.getElementById('settings-delete-password').value = appData.deletePassword;
-                updateLastBackupUI();
+                hydrateSettingsInputs();
                 renderAll();
-                showToast('Data successfully restored from Gmail backup!');
+                showToast('Data restored successfully!');
             });
         }
 
@@ -1572,6 +1771,43 @@
 
         function closePasswordModal() {
             document.getElementById('password-modal').classList.add('hidden');
+        }
+
+        function promptDelete(type, id) {
+            const pwd = appData.deletePassword ? appData.deletePassword.trim() : '';
+            if (pwd === '') {
+                openConfirmModal('Are you sure you want to move this item to Recycle Bin?', () => {
+                    executeDeleteDirect(type, id);
+                });
+                return;
+            }
+            document.getElementById('password-modal-title').innerText = 'Enter Delete Password';
+            document.getElementById('password-modal-desc').innerText = 'Please enter your password to delete this item.';
+            document.getElementById('prompt-delete-password').value = '';
+            document.getElementById('password-modal').classList.remove('hidden');
+
+            window.verifyPasswordAndProceed = function() {
+                const enteredPwd = document.getElementById('prompt-delete-password').value.trim();
+                if (enteredPwd !== pwd) {
+                    showToast('Incorrect password!');
+                    return;
+                }
+                closePasswordModal();
+                executeDeleteDirect(type, id);
+            };
+        }
+
+        function executeDeleteDirect(type, id) {
+            if (type === 'CUSTOMER') {
+                const cIdx = appData.customers.findIndex(c => c.id === id);
+                if (cIdx >= 0) {
+                    appData.recycleBin.push({ binType: 'CUSTOMER', data: appData.customers[cIdx], deletedAt: new Date().toLocaleString() });
+                    appData.customers.splice(cIdx, 1);
+                }
+            }
+            saveToLocalStorage();
+            renderAll();
+            showToast('Item moved to Recycle Bin.');
         }
 
         function deleteSelectedItems() {
@@ -2643,15 +2879,9 @@
                                 recycleBin: parsed.recycleBin || []
                             };
                             saveToLocalStorage();
-                            updateBusinessNameUI();
-                            updateProfileAvatarUI();
-                            document.getElementById('settings-business-name').value = appData.businessName;
-                            document.getElementById('settings-business-address').value = appData.businessAddress;
-                            document.getElementById('settings-gmail-id').value = appData.gmailBackupId;
-                            document.getElementById('settings-delete-password').value = appData.deletePassword;
-                            updateLastBackupUI();
-                            renderAll();
+                            hydrateSettingsInputs();
                             switchTab('dashboard');
+                            renderAll();
                             showToast('Data successfully restored from TXT file!');
                         } else {
                             showToast('Invalid backup file format.');
@@ -2679,14 +2909,14 @@
             confirmCallback = null;
         }
 
-        function showToast(msg) {
+        window.showToast = function(msg) {
             const toast = document.getElementById('toast');
             document.getElementById('toast-msg').innerText = msg;
             toast.classList.remove('translate-y-20', 'opacity-0');
             setTimeout(() => {
                 toast.classList.add('translate-y-20', 'opacity-0');
             }, 3000);
-        }
+        };
     </script>
 </body>
 </html>
