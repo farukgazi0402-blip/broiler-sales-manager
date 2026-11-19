@@ -36,9 +36,75 @@
         .shake-anim {
             animation: shake 0.3s ease-in-out;
         }
+
+        /* 2-Second Splash Screen Animation: Top drop -> Hold 1s in center -> Drop down fast */
+        #splash-screen {
+            position: fixed;
+            inset: 0;
+            background: #047857;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            z-index: 9999;
+            animation: splashScreenExit 0.25s ease 1.75s forwards;
+        }
+        #splash-logo-box {
+            width: 112px;
+            height: 112px;
+            border-radius: 28px;
+            background: #ffffff;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            animation: splashLogoDropHoldFall 2s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+        }
+        @keyframes splashLogoDropHoldFall {
+            0% {
+                transform: translateY(-100vh) scale(0.85);
+                opacity: 0;
+            }
+            12% {
+                opacity: 1;
+            }
+            25% {
+                transform: translateY(0) scale(1);
+                opacity: 1;
+            }
+            75% {
+                transform: translateY(0) scale(1);
+                opacity: 1;
+            }
+            82% {
+                transform: translateY(28px) scale(1.04);
+                opacity: 1;
+            }
+            100% {
+                transform: translateY(115vh) scale(0.92);
+                opacity: 0;
+            }
+        }
+        @keyframes splashScreenExit {
+            to {
+                opacity: 0;
+                visibility: hidden;
+                pointer-events: none;
+            }
+        }
     </style>
 </head>
 <body class="bg-slate-100 text-slate-800 h-full flex flex-col antialiased selection:bg-emerald-500 selection:text-white">
+
+    <!-- 2-Second Animated Splash Screen -->
+    <div id="splash-screen">
+        <div id="splash-logo-box">
+            <span id="splash-default-icon" class="text-5xl">🐔</span>
+        </div>
+        <p id="splash-brand-text" class="mt-3 text-white font-bold text-sm tracking-wide opacity-90">Broiler & Ledger Pro</p>
+    </div>
 
     <!-- Header & Navigation Bar -->
     <header class="bg-emerald-700 text-white shadow-md sticky top-0 z-45">
@@ -539,9 +605,15 @@
                         <input type="number" inputmode="decimal" id="sale-paid" min="0" value="0" oninput="calculateSaleDue()" placeholder="Cash paid" class="w-full border border-slate-300 rounded-xl px-3 py-2 focus:ring-2 focus:ring-emerald-500 focus:outline-none">
                     </div>
                     <div>
-                        <label class="block font-semibold text-slate-600 mb-1">Due Balance (₹)</label>
+                        <label class="block font-semibold text-slate-600 mb-1">This Sale Due (₹)</label>
                         <input type="number" inputmode="decimal" id="sale-due" readonly class="w-full bg-slate-100 border border-slate-300 rounded-xl px-3 py-2 font-bold text-rose-600">
                     </div>
+                </div>
+
+                <!-- Total Outstanding Box Below New Sale Entry -->
+                <div id="sale-total-outstanding-box" class="p-3 rounded-xl border bg-amber-50 border-amber-300 text-amber-950 text-xs flex justify-between items-center font-bold">
+                    <span id="sale-total-outstanding-label">Total Outstanding (After Entry):</span>
+                    <span id="sale-total-outstanding-amount" class="text-sm font-extrabold text-rose-700">₹ 0.00</span>
                 </div>
 
                 <div>
@@ -688,6 +760,8 @@
 
         window.onload = function() {
             loadFromLocalStorage();
+            updateSplashLogoUI();
+
             const today = new Date().toISOString().split('T')[0];
             document.getElementById('sale-date').value = today;
             document.getElementById('pay-date').value = today;
@@ -707,12 +781,35 @@
             startLiveClock();
         };
 
-        // Cordova PDF Save, Open & Share Helper
+        function updateSplashLogoUI() {
+            const box = document.getElementById('splash-logo-box');
+            const brandText = document.getElementById('splash-brand-text');
+            if (brandText) brandText.innerText = appData.businessName || 'Broiler & Ledger Pro';
+            if (box && appData.profilePhoto) {
+                box.innerHTML = `<img src="${appData.profilePhoto}" alt="Logo" class="w-full h-full object-cover">`;
+            }
+        }
+
+        // Helper: Customer net balance (+ means Due, - means Advance)
+        function getCustomerNetBalance(customerId, excludeSaleId = null) {
+            if (!customerId) return 0;
+            let bal = 0;
+            appData.sales
+                .filter(s => s.customerId === customerId && s.id !== excludeSaleId)
+                .forEach(s => bal += (parseFloat(s.due) || 0));
+            appData.payments
+                .filter(p => p.customerId === customerId)
+                .forEach(p => bal -= (parseFloat(p.amount) || 0));
+            return bal;
+        }
+
+        // Cordova PDF Save, Open & Share Helper (Compatible with any PDF Viewer)
         function saveAndSharePDF(printDiv, filename, successMsg) {
+            const safeFilename = filename.toLowerCase().endsWith('.pdf') ? filename : `${filename}.pdf`;
             document.body.appendChild(printDiv);
             const opt = {
                 margin:       [0.2, 0.2, 0.2, 0.2],
-                filename:     filename,
+                filename:     safeFilename,
                 image:        { type: 'jpeg', quality: 0.98 },
                 html2canvas:  { scale: 2, useCORS: true, letterRendering: true },
                 jsPDF:        { unit: 'in', format: 'a4', orientation: 'portrait', compress: true }
@@ -721,8 +818,17 @@
             const isCordova = !!(window.cordova && window.cordova.file && window.resolveLocalFileSystemURL);
 
             if (!isCordova) {
-                html2pdf().from(printDiv).set(opt).save().then(() => {
+                html2pdf().from(printDiv).set(opt).outputPdf('blob').then((pdfBlob) => {
                     if (printDiv.parentNode) document.body.removeChild(printDiv);
+                    const standardPdfBlob = new Blob([pdfBlob], { type: 'application/pdf' });
+                    const url = URL.createObjectURL(standardPdfBlob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = safeFilename;
+                    document.body.appendChild(a);
+                    a.click();
+                    a.remove();
+                    setTimeout(() => URL.revokeObjectURL(url), 5000);
                     showToast(successMsg);
                 }).catch((err) => {
                     console.error('PDF error:', err);
@@ -734,10 +840,11 @@
 
             html2pdf().from(printDiv).set(opt).outputPdf('blob').then((pdfBlob) => {
                 if (printDiv.parentNode) document.body.removeChild(printDiv);
+                const standardPdfBlob = new Blob([pdfBlob], { type: 'application/pdf' });
 
-                const targetDir = window.cordova.file.externalDataDirectory || window.cordova.file.dataDirectory;
+                const targetDir = window.cordova.file.externalDataDirectory || window.cordova.file.cacheDirectory || window.cordova.file.dataDirectory;
                 window.resolveLocalFileSystemURL(targetDir, function(dirEntry) {
-                    dirEntry.getFile(filename, { create: true, exclusive: false }, function(fileEntry) {
+                    dirEntry.getFile(safeFilename, { create: true, exclusive: false }, function(fileEntry) {
                         fileEntry.createWriter(function(fileWriter) {
                             fileWriter.onwriteend = function() {
                                 showToast(successMsg);
@@ -752,20 +859,20 @@
                                             error: function(err) {
                                                 console.warn('fileOpener2 error, falling back to share:', err);
                                                 if (window.plugins && window.plugins.socialsharing && typeof window.plugins.socialsharing.share === 'function') {
-                                                    window.plugins.socialsharing.share(null, filename, fileUrl, null);
+                                                    window.plugins.socialsharing.share('PDF Report', safeFilename, fileUrl, null);
                                                 }
                                             }
                                         }
                                     );
                                 } else if (window.plugins && window.plugins.socialsharing && typeof window.plugins.socialsharing.share === 'function') {
-                                    window.plugins.socialsharing.share(null, filename, fileUrl, null);
+                                    window.plugins.socialsharing.share('PDF Report', safeFilename, fileUrl, null);
                                 }
                             };
                             fileWriter.onerror = function(e) {
                                 console.error('FileWriter error:', e);
                                 showToast('Error saving PDF file on device!');
                             };
-                            fileWriter.write(pdfBlob);
+                            fileWriter.write(standardPdfBlob);
                         }, function(err) {
                             console.error('createWriter error:', err);
                             showToast('Cannot write PDF file!');
@@ -1008,6 +1115,8 @@
             if (menuName) menuName.innerText = name;
             const pdfTitle = document.getElementById('pdf-business-title');
             if (pdfTitle) pdfTitle.innerText = name.toUpperCase();
+            const splashText = document.getElementById('splash-brand-text');
+            if (splashText) splashText.innerText = name;
         }
 
         function updateProfileAvatarUI() {
@@ -1024,6 +1133,7 @@
                 if (drawerAvatar) drawerAvatar.innerHTML = '👤';
                 if (settingsAvatar) settingsAvatar.innerHTML = '👤';
             }
+            updateSplashLogoUI();
         }
 
         function handleProfilePhotoUpload(e) {
@@ -1290,6 +1400,7 @@
                 document.getElementById('sale-customer-balance-box').classList.add('hidden');
             }
             onSaleCustomerChange();
+            updateLiveTotalOutstandingInModal();
         }
 
         function closeSaleModal() {
@@ -1322,18 +1433,18 @@
 
         function onSaleCustomerChange() {
             const custId = document.getElementById('sale-customer-id').value;
+            const saleId = document.getElementById('sale-id').value || null;
             const box = document.getElementById('sale-customer-balance-box');
             const label = document.getElementById('sale-balance-label');
             const amountSpan = document.getElementById('sale-balance-amount');
 
             if (!custId) {
                 box.classList.add('hidden');
+                updateLiveTotalOutstandingInModal();
                 return;
             }
 
-            let balance = 0;
-            appData.sales.filter(s => s.customerId === custId).forEach(s => balance += s.due);
-            appData.payments.filter(p => p.customerId === custId).forEach(p => balance -= p.amount);
+            const balance = getCustomerNetBalance(custId, saleId);
 
             box.classList.remove('hidden');
             if (balance > 0) {
@@ -1352,6 +1463,47 @@
                 amountSpan.className = "text-sm font-bold text-slate-700";
                 amountSpan.innerText = "₹ 0.00 (Clear)";
             }
+            updateLiveTotalOutstandingInModal();
+        }
+
+        function updateLiveTotalOutstandingInModal() {
+            const custId = document.getElementById('sale-customer-id').value;
+            const saleId = document.getElementById('sale-id').value || null;
+            const total = parseFloat(document.getElementById('sale-total').value) || 0;
+            const paid = parseFloat(document.getElementById('sale-paid').value) || 0;
+
+            const outBox = document.getElementById('sale-total-outstanding-box');
+            const outLabel = document.getElementById('sale-total-outstanding-label');
+            const outAmount = document.getElementById('sale-total-outstanding-amount');
+
+            if (!custId) {
+                const currentDue = Math.max(0, total - paid);
+                outBox.className = "p-3 rounded-xl border bg-slate-50 border-slate-200 text-slate-800 text-xs flex justify-between items-center font-bold";
+                outLabel.innerText = "Total Outstanding (Select Customer):";
+                outAmount.className = "text-sm font-extrabold text-slate-800";
+                outAmount.innerText = "₹ " + currentDue.toLocaleString('en-IN', {minimumFractionDigits: 2});
+                return;
+            }
+
+            const prevNet = getCustomerNetBalance(custId, saleId);
+            const newNet = prevNet + (total - paid);
+
+            if (newNet > 0) {
+                outBox.className = "p-3 rounded-xl border bg-rose-50 border-rose-300 text-rose-950 text-xs flex justify-between items-center font-bold";
+                outLabel.innerText = "Total Outstanding (Due):";
+                outAmount.className = "text-sm font-extrabold text-rose-700";
+                outAmount.innerText = "₹ " + newNet.toLocaleString('en-IN', {minimumFractionDigits: 2});
+            } else if (newNet < 0) {
+                outBox.className = "p-3 rounded-xl border bg-emerald-50 border-emerald-300 text-emerald-950 text-xs flex justify-between items-center font-bold";
+                outLabel.innerText = "Total Outstanding (Advance):";
+                outAmount.className = "text-sm font-extrabold text-emerald-700";
+                outAmount.innerText = "₹ " + Math.abs(newNet).toLocaleString('en-IN', {minimumFractionDigits: 2});
+            } else {
+                outBox.className = "p-3 rounded-xl border bg-slate-50 border-slate-200 text-slate-800 text-xs flex justify-between items-center font-bold";
+                outLabel.innerText = "Total Outstanding:";
+                outAmount.className = "text-sm font-extrabold text-slate-700";
+                outAmount.innerText = "₹ 0.00 (Clear)";
+            }
         }
 
         function calculateSaleTotal() {
@@ -1367,6 +1519,7 @@
             const paid = parseFloat(document.getElementById('sale-paid').value) || 0;
             const due = Math.max(0, total - paid);
             document.getElementById('sale-due').value = due.toFixed(2);
+            updateLiveTotalOutstandingInModal();
         }
 
         function confirmBeforeAction(e, type) {
@@ -1557,6 +1710,13 @@
             const bName = appData.businessName || 'Broiler & Ledger Pro';
             const avgWeight = s.birds > 0 ? (s.weight / s.birds).toFixed(3) : '0.000';
 
+            const totalOutstanding = getCustomerNetBalance(s.customerId);
+            const outstandingText = totalOutstanding > 0
+                ? `₹${totalOutstanding.toLocaleString('en-IN', {minimumFractionDigits: 2})} (Due)`
+                : totalOutstanding < 0
+                    ? `₹${Math.abs(totalOutstanding).toLocaleString('en-IN', {minimumFractionDigits: 2})} (Advance)`
+                    : `₹0.00 (Clear)`;
+
             const msg = `*🐔 ${bName.toUpperCase()} INVOICE*
 ` +
                         `------------------------------------
@@ -1579,7 +1739,9 @@
 ` +
                         `Paid Amount: ₹${s.paid.toLocaleString()}
 ` +
-                        `Due Balance: ₹${s.due.toLocaleString()}
+                        `This Bill Due: ₹${s.due.toLocaleString()}
+` +
+                        `*Total Outstanding: ${outstandingText}*
 ` +
                         `------------------------------------
 ` +
@@ -1608,6 +1770,13 @@
                 const qClass = s.quality === 'Fresh Birds' ? 'bg-emerald-100 text-emerald-700' : s.quality === 'Lame Birds' ? 'bg-amber-100 text-amber-700' : 'bg-rose-100 text-rose-700';
                 
                 const avgWeight = s.birds > 0 ? (s.weight / s.birds).toFixed(3) : '0.000';
+                const totalOut = getCustomerNetBalance(s.customerId);
+                const outDisplay = totalOut > 0
+                    ? `<span class="font-bold text-rose-700">₹${totalOut.toLocaleString('en-IN', {minimumFractionDigits: 2})} (Due)</span>`
+                    : totalOut < 0
+                        ? `<span class="font-bold text-emerald-700">₹${Math.abs(totalOut).toLocaleString('en-IN', {minimumFractionDigits: 2})} (Adv)</span>`
+                        : `<span class="font-bold text-slate-700">₹0.00 (Clear)</span>`;
+
                 const cardDivId = `sale_card_${s.id}`;
                 const isSelected = selectedTransactionIds.has(s.id);
                 const borderStyle = isSelected ? 'border-2 border-emerald-600 bg-emerald-50/40' : 'border-slate-200';
@@ -1626,28 +1795,34 @@
                 }, 50);
 
                 return `
-                    <div id="${cardDivId}" onclick="if(isMultiSelectMode) { toggleTransactionSelection('${s.id}'); }" class="bg-white p-4 rounded-2xl shadow-sm border ${borderStyle} flex flex-col md:flex-row justify-between items-start md:items-center gap-3 text-xs select-none cursor-pointer transition-all" title="Hold 1 second to select">
-                        <div class="flex items-center gap-3 w-full">
-                            <div class="space-y-1 flex-grow">
-                                <div class="flex items-center gap-2">
-                                    <span class="font-bold text-slate-800 text-sm">${cName}</span>
-                                    <span class="px-2 py-0.5 rounded text-[10px] font-semibold whitespace-nowrap ${qClass}">${s.quality}</span>
+                    <div id="${cardDivId}" onclick="if(isMultiSelectMode) { toggleTransactionSelection('${s.id}'); }" class="bg-white p-4 rounded-2xl shadow-sm border ${borderStyle} flex flex-col gap-2.5 text-xs select-none cursor-pointer transition-all" title="Hold 1 second to select">
+                        <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
+                            <div class="flex items-center gap-3 w-full">
+                                <div class="space-y-1 flex-grow">
+                                    <div class="flex items-center gap-2">
+                                        <span class="font-bold text-slate-800 text-sm">${cName}</span>
+                                        <span class="px-2 py-0.5 rounded text-[10px] font-semibold whitespace-nowrap ${qClass}">${s.quality}</span>
+                                    </div>
+                                    <p class="text-slate-500 font-medium">Date & Time: <span class="text-slate-700">${s.date} ${s.time ? '• ' + s.time : ''}</span></p>
+                                    <p class="text-slate-600 text-[11px]">Birds: <strong class="text-slate-800">${s.birds} Pcs</strong> | Weight: <strong class="text-slate-800">${s.weight} Kg</strong> | Rate: <strong class="text-slate-800">₹${s.rate}/Kg</strong></p>
+                                    <p class="text-slate-600 text-[11px]">Avg Weight: <strong class="text-slate-800">${avgWeight} Kg/Pc</strong></p>
+                                    ${s.note ? `<p class="text-slate-400 italic">Note: ${s.note}</p>` : ''}
                                 </div>
-                                <p class="text-slate-500 font-medium">Date & Time: <span class="text-slate-700">${s.date} ${s.time ? '• ' + s.time : ''}</span></p>
-                                <p class="text-slate-600 text-[11px]">Birds: <strong class="text-slate-800">${s.birds} Pcs</strong> | Weight: <strong class="text-slate-800">${s.weight} Kg</strong> | Rate: <strong class="text-slate-800">₹${s.rate}/Kg</strong></p>
-                                <p class="text-slate-600 text-[11px]">Avg Weight: <strong class="text-slate-800">${avgWeight} Kg/Pc</strong></p>
-                                ${s.note ? `<p class="text-slate-400 italic">Note: ${s.note}</p>` : ''}
+                            </div>
+                            <div class="flex items-center justify-between w-full md:w-auto gap-4 border-t md:border-0 pt-2 md:pt-0">
+                                <div class="text-right">
+                                    <p class="text-sm font-bold text-slate-800">₹ ${s.total.toLocaleString()}</p>
+                                    <p class="text-[10px] text-emerald-600 font-medium">Paid: ₹${s.paid.toLocaleString()} | Due: <span class="text-rose-600">₹${s.due.toLocaleString()}</span></p>
+                                </div>
+                                <div class="flex gap-1" onclick="event.stopPropagation()">
+                                    <button onclick="shareOnWhatsApp('${s.id}')" class="p-2 bg-emerald-50 text-emerald-600 rounded-xl hover:bg-emerald-100 transition" title="Share on WhatsApp">💬</button>
+                                    <button onclick="promptEditSale('${s.id}')" class="p-2 bg-blue-50 text-blue-600 rounded-xl hover:bg-blue-100 transition" title="Edit">✏️</button>
+                                </div>
                             </div>
                         </div>
-                        <div class="flex items-center justify-between w-full md:w-auto gap-4 border-t md:border-0 pt-2 md:pt-0">
-                            <div class="text-right">
-                                <p class="text-sm font-bold text-slate-800">₹ ${s.total.toLocaleString()}</p>
-                                <p class="text-[10px] text-emerald-600 font-medium">Paid: ₹${s.paid.toLocaleString()} | Due: <span class="text-rose-600">₹${s.due.toLocaleString()}</span></p>
-                            </div>
-                            <div class="flex gap-1" onclick="event.stopPropagation()">
-                                <button onclick="shareOnWhatsApp('${s.id}')" class="p-2 bg-emerald-50 text-emerald-600 rounded-xl hover:bg-emerald-100 transition" title="Share on WhatsApp">💬</button>
-                                <button onclick="promptEditSale('${s.id}')" class="p-2 bg-blue-50 text-blue-600 rounded-xl hover:bg-blue-100 transition" title="Edit">✏️</button>
-                            </div>
+                        <div class="bg-slate-50 border border-slate-200/80 rounded-xl px-3 py-2 flex justify-between items-center text-[11px]">
+                            <span class="font-semibold text-slate-600">Total Outstanding (${cName}):</span>
+                            ${outDisplay}
                         </div>
                     </div>
                 `;
@@ -1936,6 +2111,10 @@
             saveToLocalStorage();
             closeCustomerModal();
             renderAll();
+            if (!document.getElementById('sale-modal').classList.contains('hidden')) {
+                document.getElementById('sale-customer-id').value = id;
+                onSaleCustomerChange();
+            }
         }
 
         function renderCustomerList() {
@@ -2052,9 +2231,7 @@
                 dueField.value = '₹ 0.00';
                 return;
             }
-            let due = 0;
-            appData.sales.filter(s => s.customerId === custId).forEach(s => due += s.due);
-            appData.payments.filter(p => p.customerId === custId).forEach(p => due -= p.amount);
+            const due = getCustomerNetBalance(custId);
 
             if (due > 0) {
                 dueField.value = '₹ ' + due.toLocaleString() + ' (Due)';
@@ -2115,9 +2292,7 @@
             const phone = c ? c.phone.replace(/[^0-9]/g, '') : '';
             const bName = appData.businessName || 'Broiler & Ledger Pro';
 
-            let due = 0;
-            appData.sales.filter(s => s.customerId === p.customerId).forEach(s => due += s.due);
-            appData.payments.filter(item => item.customerId === p.customerId).forEach(item => due -= item.amount);
+            const due = getCustomerNetBalance(p.customerId);
 
             const msg = `*🐔 ${bName.toUpperCase()} PAYMENT RECEIPT*
 ` +
@@ -2134,7 +2309,7 @@
                         `${p.note ? 'Note: ' + p.note + '\n' : ''}` +
                         `------------------------------------
 ` +
-                        `Current Balance: ₹${Math.abs(due).toLocaleString()} ${due > 0 ? '(Due)' : due < 0 ? '(Advance)' : '(Clear)'}
+                        `*Total Outstanding: ₹${Math.abs(due).toLocaleString()} ${due > 0 ? '(Due)' : due < 0 ? '(Advance)' : '(Clear)'}*
 ` +
                         `------------------------------------
 ` +
@@ -2279,7 +2454,7 @@
             if (netBalance > 0) {
                 balanceCardHtml = `
                     <div class="flex justify-between items-center bg-rose-50 border border-rose-200 text-rose-900 p-3 rounded-xl font-semibold">
-                        <span>Current Due Balance:</span>
+                        <span>Total Outstanding (Due):</span>
                         <span class="text-base font-bold text-rose-700">₹ ${netBalance.toLocaleString('en-IN', {minimumFractionDigits: 2})}</span>
                     </div>
                 `;
@@ -2306,7 +2481,7 @@
             } else {
                 balanceCardHtml = `
                     <div class="flex justify-between items-center bg-slate-50 border border-slate-200 text-slate-700 p-3 rounded-xl font-semibold">
-                        <span>Net Balance:</span>
+                        <span>Total Outstanding:</span>
                         <span class="text-base font-bold text-slate-700">₹ 0.00 (Clear)</span>
                     </div>
                 `;
