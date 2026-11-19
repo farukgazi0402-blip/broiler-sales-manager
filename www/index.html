@@ -707,7 +707,7 @@
             startLiveClock();
         };
 
-        // Cordova PDF Save & Share Helper
+        // Cordova PDF Save, Open & Share Helper
         function saveAndSharePDF(printDiv, filename, successMsg) {
             document.body.appendChild(printDiv);
             const opt = {
@@ -741,8 +741,24 @@
                         fileEntry.createWriter(function(fileWriter) {
                             fileWriter.onwriteend = function() {
                                 showToast(successMsg);
-                                if (window.plugins && window.plugins.socialsharing && typeof window.plugins.socialsharing.share === 'function') {
-                                    window.plugins.socialsharing.share(null, filename, fileEntry.nativeURL, null);
+                                const fileUrl = fileEntry.nativeURL;
+
+                                if (window.cordova && window.cordova.plugins && window.cordova.plugins.fileOpener2) {
+                                    window.cordova.plugins.fileOpener2.open(
+                                        fileUrl,
+                                        'application/pdf',
+                                        {
+                                            success: function() {},
+                                            error: function(err) {
+                                                console.warn('fileOpener2 error, falling back to share:', err);
+                                                if (window.plugins && window.plugins.socialsharing && typeof window.plugins.socialsharing.share === 'function') {
+                                                    window.plugins.socialsharing.share(null, filename, fileUrl, null);
+                                                }
+                                            }
+                                        }
+                                    );
+                                } else if (window.plugins && window.plugins.socialsharing && typeof window.plugins.socialsharing.share === 'function') {
+                                    window.plugins.socialsharing.share(null, filename, fileUrl, null);
                                 }
                             };
                             fileWriter.onerror = function(e) {
