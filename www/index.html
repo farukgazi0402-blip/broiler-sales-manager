@@ -221,6 +221,7 @@
             <button onclick="switchTab('customers'); closeDrawerMenu();" class="w-full text-left px-4 py-3.5 hover:bg-emerald-800 hover:text-white rounded-xl flex items-center gap-3 transition">👥 Customers</button>
             <button onclick="switchTab('ledger'); closeDrawerMenu();" class="w-full text-left px-4 py-3.5 hover:bg-emerald-800 hover:text-white rounded-xl flex items-center gap-3 transition">📖 Ledger Book</button>
             <button onclick="switchTab('settings'); closeDrawerMenu();" class="w-full text-left px-4 py-3.5 hover:bg-emerald-800 hover:text-white rounded-xl flex items-center gap-3 transition border-t border-emerald-600 mt-4">⚙️ Settings</button>
+            <button onclick="closeDrawerMenu(); logoutCloudAccount();" class="w-full text-left px-4 py-3.5 hover:bg-rose-700 bg-rose-600/90 text-white rounded-xl flex items-center gap-3 transition">🚪 Logout</button>
         </div>
     </div>
 
@@ -525,7 +526,7 @@
             <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 space-y-4">
                 <div>
                     <h2 class="text-base md:text-lg font-bold text-slate-800">Cloud Sync & Account</h2>
-                    <p class="text-xs text-slate-500">Logged-in account syncs automatically to Cloud Firestore. Re-login with same email & password on any device to restore all data.</p>
+                    <p class="text-xs text-slate-500">Logged-in account syncs automatically to Cloud Firestore every moment. Re-login with same email & password on any device to restore all data.</p>
                 </div>
                 <div class="space-y-3">
                     <div>
@@ -550,11 +551,6 @@
                                 🔄 Restore Data
                             </button>
                         </div>
-                    </div>
-                    <div class="pt-2 flex justify-end">
-                        <button onclick="logoutCloudAccount()" class="bg-rose-600 hover:bg-rose-700 text-white px-4 py-2 rounded-xl text-xs font-bold shadow transition">
-                            🚪 Logout Account
-                        </button>
                     </div>
                 </div>
             </div>
@@ -790,7 +786,7 @@
         <span id="toast-msg">Success!</span>
     </div>
 
-    <!-- Firebase Authentication & Cloud Firestore Sync -->
+    <!-- Firebase Authentication & Cloud Firestore Real-Time Sync -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
         import {
@@ -826,6 +822,8 @@
         const passInput = document.getElementById('cloud-auth-password');
         const statusEl = document.getElementById('cloud-auth-status');
 
+        let lastSyncedSnapshot = "";
+
         function hideLoginScreenAndOpenMain() {
             if (authScreen) {
                 authScreen.classList.add('hidden');
@@ -851,15 +849,32 @@
             }
         };
 
-        window.syncAppDataToFirestore = async function(dataObj) {
+        window.syncAppDataToFirestore = async function(dataObj, force = false) {
             const user = auth.currentUser;
-            if (!user) return;
+            if (!user || !dataObj) return;
             try {
+                const payload = {
+                    businessName: dataObj.businessName || 'Broiler & Ledger Pro',
+                    businessAddress: dataObj.businessAddress || 'Swarupnagar, North 24 Parganas',
+                    gmailBackupId: dataObj.gmailBackupId || user.email || '',
+                    lastBackupTime: dataObj.lastBackupTime || '',
+                    deletePassword: dataObj.deletePassword !== undefined ? dataObj.deletePassword : '',
+                    profilePhoto: dataObj.profilePhoto || '',
+                    customers: Array.isArray(dataObj.customers) ? dataObj.customers : [],
+                    sales: Array.isArray(dataObj.sales) ? dataObj.sales : [],
+                    payments: Array.isArray(dataObj.payments) ? dataObj.payments : [],
+                    recycleBin: Array.isArray(dataObj.recycleBin) ? dataObj.recycleBin : []
+                };
+                const serialized = JSON.stringify(payload);
+                if (!force && serialized === lastSyncedSnapshot) return;
+
                 await setDoc(doc(db, "users", user.uid), {
                     email: user.email,
-                    appData: dataObj,
+                    appData: payload,
                     updatedAt: new Date().toISOString()
                 }, { merge: true });
+
+                lastSyncedSnapshot = serialized;
             } catch (err) {
                 console.error("Firestore sync error:", err);
             }
@@ -868,10 +883,12 @@
         window.fetchAppDataFromFirestore = async function(uid) {
             try {
                 const docPromise = getDoc(doc(db, "users", uid));
-                const timeoutPromise = new Promise((resolve) => setTimeout(() => resolve(null), 5000));
+                const timeoutPromise = new Promise((resolve) => setTimeout(() => resolve(null), 6000));
                 const snap = await Promise.race([docPromise, timeoutPromise]);
-                if (snap && snap.exists() && snap.data().appData) {
-                    return snap.data().appData;
+                if (snap && snap.exists()) {
+                    const docData = snap.data();
+                    if (docData.appData) return docData.appData;
+                    if (docData.records && typeof docData.records === 'object') return docData.records;
                 }
                 return null;
             } catch (err) {
@@ -881,9 +898,18 @@
         };
 
         window.logoutCloudAccount = async function() {
+            lastSyncedSnapshot = "";
             await signOut(auth);
             showLoginScreen();
         };
+
+        // Every-moment background auto-upload listener
+        setInterval(() => {
+            if (auth.currentUser && typeof window.getCurrentAppData === 'function') {
+                const current = window.getCurrentAppData();
+                window.syncAppDataToFirestore(current, false);
+            }
+        }, 5000);
 
         document.getElementById('btn-cloud-login').addEventListener('click', async () => {
             const email = emailInput.value.trim();
@@ -968,6 +994,10 @@
         let selectedTransactionIds = new Set();
         let selectedBinIds = new Set();
 
+        window.getCurrentAppData = function() {
+            return appData;
+        };
+
         function hydrateSettingsInputs() {
             document.getElementById('settings-business-name').value = appData.businessName || 'Broiler & Ledger Pro';
             document.getElementById('settings-business-address').value = appData.businessAddress || '';
@@ -987,22 +1017,24 @@
                     lastBackupTime: cloudData.lastBackupTime || '',
                     deletePassword: cloudData.deletePassword !== undefined ? cloudData.deletePassword : '',
                     profilePhoto: cloudData.profilePhoto || '',
-                    customers: cloudData.customers || [],
-                    sales: cloudData.sales || [],
-                    payments: cloudData.payments || [],
-                    recycleBin: cloudData.recycleBin || []
+                    customers: Array.isArray(cloudData.customers) ? cloudData.customers : [],
+                    sales: Array.isArray(cloudData.sales) ? cloudData.sales : [],
+                    payments: Array.isArray(cloudData.payments) ? cloudData.payments : [],
+                    recycleBin: Array.isArray(cloudData.recycleBin) ? cloudData.recycleBin : []
                 };
                 localStorage.setItem('broiler_pro_app_data', JSON.stringify(appData));
             } else {
-                loadFromLocalStorage();
                 if (!appData.gmailBackupId && userEmail) {
                     appData.gmailBackupId = userEmail;
                 }
-                saveToLocalStorage();
+                localStorage.setItem('broiler_pro_app_data', JSON.stringify(appData));
+                if (typeof window.syncAppDataToFirestore === 'function') {
+                    window.syncAppDataToFirestore(appData, true);
+                }
             }
             hydrateSettingsInputs();
             renderAll();
-            showToast('Cloud data loaded automatically!');
+            showToast('Cloud data synced & loaded!');
         };
 
         window.onload = function() {
@@ -1311,7 +1343,7 @@
             localStorage.setItem('broiler_pro_app_data', JSON.stringify(appData));
             triggerAutoGmailBackup();
             if (typeof window.syncAppDataToFirestore === 'function') {
-                window.syncAppDataToFirestore(appData);
+                window.syncAppDataToFirestore(appData, true);
             }
         }
 
@@ -1433,7 +1465,7 @@
             appData.gmailBackupId = email;
             triggerAutoGmailBackup();
             if (typeof window.syncAppDataToFirestore === 'function') {
-                window.syncAppDataToFirestore(appData);
+                window.syncAppDataToFirestore(appData, true);
             }
             showToast('Gmail backup account linked successfully!');
         }
@@ -1449,7 +1481,7 @@
         function triggerManualBackup() {
             triggerAutoGmailBackup();
             if (typeof window.syncAppDataToFirestore === 'function') {
-                window.syncAppDataToFirestore(appData);
+                window.syncAppDataToFirestore(appData, true);
             }
             showToast(`Data synced to Cloud Firestore with second precision!`);
         }
