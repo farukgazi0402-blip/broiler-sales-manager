@@ -826,6 +826,23 @@
         const passInput = document.getElementById('cloud-auth-password');
         const statusEl = document.getElementById('cloud-auth-status');
 
+        function hideLoginScreenAndOpenMain() {
+            if (authScreen) {
+                authScreen.classList.add('hidden');
+                authScreen.style.display = 'none';
+            }
+            if (typeof window.switchTab === 'function') {
+                window.switchTab('dashboard', true);
+            }
+        }
+
+        function showLoginScreen() {
+            if (authScreen) {
+                authScreen.classList.remove('hidden');
+                authScreen.style.display = 'flex';
+            }
+        }
+
         window.toggleAuthPasswordVisibility = function() {
             if (passInput.type === 'password') {
                 passInput.type = 'text';
@@ -850,8 +867,10 @@
 
         window.fetchAppDataFromFirestore = async function(uid) {
             try {
-                const snap = await getDoc(doc(db, "users", uid));
-                if (snap.exists() && snap.data().appData) {
+                const docPromise = getDoc(doc(db, "users", uid));
+                const timeoutPromise = new Promise((resolve) => setTimeout(() => resolve(null), 5000));
+                const snap = await Promise.race([docPromise, timeoutPromise]);
+                if (snap && snap.exists() && snap.data().appData) {
                     return snap.data().appData;
                 }
                 return null;
@@ -863,6 +882,7 @@
 
         window.logoutCloudAccount = async function() {
             await signOut(auth);
+            showLoginScreen();
         };
 
         document.getElementById('btn-cloud-login').addEventListener('click', async () => {
@@ -874,10 +894,15 @@
             }
             statusEl.textContent = "Logging in & loading data...";
             try {
-                await signInWithEmailAndPassword(auth, email, password);
+                const cred = await signInWithEmailAndPassword(auth, email, password);
                 statusEl.textContent = "";
+                hideLoginScreenAndOpenMain();
+                const cloudData = await window.fetchAppDataFromFirestore(cred.user.uid);
+                if (typeof window.applyCloudAppData === "function") {
+                    window.applyCloudAppData(cloudData, cred.user.email);
+                }
             } catch (err) {
-                statusEl.textContent = "Login failed: " + err.message;
+                statusEl.textContent = "Invalid Email ID or Password.";
             }
         });
 
@@ -890,25 +915,34 @@
             }
             statusEl.textContent = "Creating account...";
             try {
-                await createUserWithEmailAndPassword(auth, email, password);
+                const cred = await createUserWithEmailAndPassword(auth, email, password);
                 statusEl.textContent = "";
+                hideLoginScreenAndOpenMain();
+                if (typeof window.applyCloudAppData === "function") {
+                    window.applyCloudAppData(null, cred.user.email);
+                }
                 if (typeof window.showToast === "function") {
                     window.showToast("Account created successfully!");
                 }
             } catch (err) {
-                statusEl.textContent = "Registration failed: " + err.message;
+                if (err.code === 'auth/email-already-in-use') {
+                    statusEl.textContent = "Email ID and Password already exists";
+                } else {
+                    statusEl.textContent = "Unable to create account. Please try again.";
+                }
             }
         });
 
         onAuthStateChanged(auth, async (user) => {
             if (user) {
-                authScreen.classList.add('hidden');
+                statusEl.textContent = "";
+                hideLoginScreenAndOpenMain();
                 const cloudData = await window.fetchAppDataFromFirestore(user.uid);
                 if (typeof window.applyCloudAppData === "function") {
                     window.applyCloudAppData(cloudData, user.email);
                 }
             } else {
-                authScreen.classList.remove('hidden');
+                showLoginScreen();
             }
         });
     </script>
@@ -1447,7 +1481,7 @@
             }
         }
 
-        function switchTab(tabId, skipSave = false) {
+        window.switchTab = function(tabId, skipSave = false) {
             cancelMultiSelect();
             if (!skipSave) {
                 localStorage.setItem('broiler_pro_active_tab', tabId);
@@ -1468,7 +1502,7 @@
             } else if (tabId === 'settings') {
                 renderRecycleBin();
             }
-        }
+        };
 
         function renderAll() {
             renderDashboard();
