@@ -105,21 +105,33 @@
             align-items: center;
             justify-content: center;
             padding: 16px;
+            overflow-y: auto;
         }
     </style>
 </head>
 <body class="bg-slate-100 text-slate-800 h-full flex flex-col antialiased selection:bg-emerald-500 selection:text-white">
 
-    <!-- Cloud Email/Password Login Screen (English + Eye Icon) -->
+    <!-- Cloud Auth Screen: Step 1 Choice -> Step 2 Login OR Register -->
     <div id="cloud-auth-screen" class="hidden">
-        <div class="bg-white w-full max-w-sm rounded-2xl shadow-2xl p-6 space-y-4 text-xs">
+        <div class="bg-white w-full max-w-sm rounded-2xl shadow-2xl p-6 space-y-4 text-xs my-auto">
             <div class="text-center space-y-1">
                 <div class="text-4xl">🐔</div>
                 <h2 class="text-lg font-bold text-slate-800">Broiler & Ledger Pro</h2>
-                <p class="text-slate-500">Sign in with your Email ID and Password to automatically load your data</p>
+                <p id="auth-subtitle" class="text-slate-500">Choose an option to continue</p>
             </div>
 
-            <div class="space-y-3">
+            <!-- Initial Choice View -->
+            <div id="auth-choice-view" class="space-y-2.5 pt-1">
+                <button type="button" onclick="openAuthView('login')" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-3 rounded-xl font-bold shadow transition active:scale-95">
+                    🔐 Login
+                </button>
+                <button type="button" onclick="openAuthView('register')" class="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl font-bold shadow transition active:scale-95">
+                    ➕ Create New Account
+                </button>
+            </div>
+
+            <!-- Login Form View -->
+            <div id="auth-login-view" class="hidden space-y-3">
                 <div>
                     <label class="block font-semibold text-slate-600 mb-1">Email ID*</label>
                     <input type="email" id="cloud-auth-email" placeholder="example@gmail.com" class="w-full border border-slate-300 rounded-xl px-3 py-2.5 text-xs focus:ring-2 focus:ring-emerald-500 focus:outline-none">
@@ -127,19 +139,60 @@
                 <div>
                     <label class="block font-semibold text-slate-600 mb-1">Password*</label>
                     <div class="relative">
-                        <input type="password" id="cloud-auth-password" placeholder="At least 6 characters" class="w-full border border-slate-300 rounded-xl px-3 py-2.5 pr-10 text-xs focus:ring-2 focus:ring-emerald-500 focus:outline-none">
-                        <button type="button" id="btn-toggle-auth-password" onclick="toggleAuthPasswordVisibility()" class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 text-sm focus:outline-none" title="Show/Hide Password">👁️</button>
+                        <input type="password" id="cloud-auth-password" placeholder="Enter password" class="w-full border border-slate-300 rounded-xl px-3 py-2.5 pr-10 text-xs focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+                        <button type="button" onclick="toggleInputEye('cloud-auth-password')" class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 text-sm focus:outline-none" title="Show/Hide Password">👁️</button>
                     </div>
+                </div>
+                <div class="space-y-2 pt-1">
+                    <button type="button" id="btn-cloud-login" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-2.5 rounded-xl font-bold shadow transition active:scale-95">
+                        🔐 Login & Load Data
+                    </button>
+                    <button type="button" onclick="openAuthView('choice')" class="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 py-2 rounded-xl font-semibold transition">
+                        ← Back
+                    </button>
                 </div>
             </div>
 
-            <div class="space-y-2 pt-1">
-                <button type="button" id="btn-cloud-login" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-2.5 rounded-xl font-bold shadow transition active:scale-95">
-                    🔐 Login & Load Data
-                </button>
-                <button type="button" id="btn-cloud-register" class="w-full bg-blue-600 hover:bg-blue-700 text-white py-2.5 rounded-xl font-bold shadow transition active:scale-95">
-                    ➕ Create New Account
-                </button>
+            <!-- Create New Account Form View -->
+            <div id="auth-register-view" class="hidden space-y-2.5">
+                <div>
+                    <label class="block font-semibold text-slate-600 mb-1">Name*</label>
+                    <input type="text" id="reg-name" autocapitalize="words" placeholder="Your full name" class="w-full border border-slate-300 rounded-xl px-3 py-2 text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                </div>
+                <div>
+                    <label class="block font-semibold text-slate-600 mb-1">Business Name*</label>
+                    <input type="text" id="reg-business-name" autocapitalize="words" placeholder="e.g. Broiler & Ledger Pro" class="w-full border border-slate-300 rounded-xl px-3 py-2 text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                </div>
+                <div>
+                    <label class="block font-semibold text-slate-600 mb-1">Address*</label>
+                    <input type="text" id="reg-address" autocapitalize="words" placeholder="Business address" class="w-full border border-slate-300 rounded-xl px-3 py-2 text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                </div>
+                <div>
+                    <label class="block font-semibold text-slate-600 mb-1">Email ID*</label>
+                    <input type="email" id="reg-email" placeholder="example@gmail.com" class="w-full border border-slate-300 rounded-xl px-3 py-2 text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                </div>
+                <div>
+                    <label class="block font-semibold text-slate-600 mb-1">Password*</label>
+                    <div class="relative">
+                        <input type="password" id="reg-password" placeholder="At least 6 characters" class="w-full border border-slate-300 rounded-xl px-3 py-2 pr-10 text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                        <button type="button" onclick="toggleInputEye('reg-password')" class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 text-sm focus:outline-none" title="Show/Hide Password">👁️</button>
+                    </div>
+                </div>
+                <div>
+                    <label class="block font-semibold text-slate-600 mb-1">Confirm Password*</label>
+                    <div class="relative">
+                        <input type="password" id="reg-confirm-password" placeholder="Re-enter password" class="w-full border border-slate-300 rounded-xl px-3 py-2 pr-10 text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                        <button type="button" onclick="toggleInputEye('reg-confirm-password')" class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 text-sm focus:outline-none" title="Show/Hide Password">👁️</button>
+                    </div>
+                </div>
+                <div class="space-y-2 pt-1">
+                    <button type="button" id="btn-cloud-register" class="w-full bg-blue-600 hover:bg-blue-700 text-white py-2.5 rounded-xl font-bold shadow transition active:scale-95">
+                        ➕ Create Account
+                    </button>
+                    <button type="button" onclick="openAuthView('choice')" class="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 py-2 rounded-xl font-semibold transition">
+                        ← Back
+                    </button>
+                </div>
             </div>
 
             <p id="cloud-auth-status" class="text-center font-semibold text-rose-600 min-h-[18px]"></p>
@@ -209,6 +262,7 @@
             <div class="flex items-center gap-3">
                 <div id="drawer-avatar-preview" class="w-11 h-11 rounded-full bg-emerald-600 border border-emerald-400 text-white font-bold flex items-center justify-center overflow-hidden text-sm shadow">👤</div>
                 <div class="overflow-hidden">
+                    <p id="drawer-user-greeting" class="text-[11px] font-semibold text-emerald-200 truncate">Hi, User</p>
                     <p class="font-bold text-sm truncate" id="drawer-business-name-display">Broiler & Ledger Pro</p>
                     <p class="text-[11px] text-emerald-200">Management Menu</p>
                 </div>
@@ -475,6 +529,10 @@
                 <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 items-center">
                     <div class="sm:col-span-2 space-y-3">
                         <div>
+                            <label class="block text-xs font-semibold text-slate-600 mb-1">Owner Name</label>
+                            <input type="text" id="settings-owner-name" autocapitalize="words" placeholder="Your name" class="w-full border border-slate-300 rounded-xl px-3 py-2 text-xs focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+                        </div>
+                        <div>
                             <label class="block text-xs font-semibold text-slate-600 mb-1">Business Name*</label>
                             <input type="text" id="settings-business-name" autocapitalize="words" placeholder="e.g. Broiler & Ledger Pro" class="w-full border border-slate-300 rounded-xl px-3 py-2 text-xs focus:ring-2 focus:ring-emerald-500 focus:outline-none">
                         </div>
@@ -483,8 +541,9 @@
                             <input type="text" id="settings-business-address" autocapitalize="words" placeholder="e.g. Swarupnagar, North 24 Parganas" class="w-full border border-slate-300 rounded-xl px-3 py-2 text-xs focus:ring-2 focus:ring-emerald-500 focus:outline-none">
                         </div>
                         <div>
-                            <label class="block text-xs font-semibold text-slate-600 mb-1">Profile Photo / Logo</label>
+                            <label class="block text-xs font-semibold text-slate-600 mb-1">Profile Photo / Logo (Auto KB Optimized)</label>
                             <input type="file" id="settings-profile-img-input" accept="image/*" onchange="handleProfilePhotoUpload(event)" class="w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-emerald-50 file:text-emerald-700 hover:file:bg-emerald-100 cursor-pointer">
+                            <p id="settings-logo-kb-info" class="text-[11px] text-emerald-700 font-medium mt-1"></p>
                         </div>
                     </div>
                     <div class="flex flex-col items-center justify-center p-3 bg-slate-50 rounded-xl border">
@@ -588,7 +647,7 @@
                     <h2 class="text-sm md:text-base font-bold text-slate-800">Account Session</h2>
                     <p class="text-xs text-slate-500">Sign out from your current account on this device.</p>
                 </div>
-                <button onclick="logoutCloudAccount()" class="bg-slate-800 hover:bg-slate-900 text-white px-5 py-2.5 rounded-xl text-xs font-bold shadow transition active:scale-95 whitespace-nowrap">
+                <button onclick="confirmAndLogoutCloudAccount()" class="bg-slate-800 hover:bg-slate-900 text-white px-5 py-2.5 rounded-xl text-xs font-bold shadow transition active:scale-95 whitespace-nowrap">
                     🚪 Logout
                 </button>
             </div>
@@ -833,6 +892,8 @@
         const statusEl = document.getElementById('cloud-auth-status');
 
         let lastSyncedSnapshot = "";
+        let isCloudHydrated = false;
+        let isLoadingFromCloud = false;
         const NO_INTERNET_MSG = "No internet connection please check your internet connection";
 
         function hasInternetConnection() {
@@ -872,6 +933,9 @@
             if (authScreen) {
                 authScreen.classList.remove('hidden');
                 authScreen.style.display = 'flex';
+                if (typeof window.openAuthView === 'function') {
+                    window.openAuthView('choice');
+                }
             }
             if (!hasInternetConnection()) {
                 statusEl.textContent = NO_INTERNET_MSG;
@@ -879,18 +943,15 @@
         }
 
         window.toggleAuthPasswordVisibility = function() {
-            if (passInput.type === 'password') {
-                passInput.type = 'text';
-            } else {
-                passInput.type = 'password';
-            }
+            passInput.type = passInput.type === 'password' ? 'text' : 'password';
         };
 
         window.syncAppDataToFirestore = async function(dataObj, force = false) {
             const user = auth.currentUser;
-            if (!user || !dataObj || !hasInternetConnection()) return;
+            if (!user || !dataObj || !isCloudHydrated || isLoadingFromCloud || !hasInternetConnection()) return;
             try {
                 const payload = {
+                    ownerName: dataObj.ownerName || '',
                     businessName: dataObj.businessName || 'Broiler & Ledger Pro',
                     businessAddress: dataObj.businessAddress || 'Swarupnagar, North 24 Parganas',
                     gmailBackupId: dataObj.gmailBackupId || user.email || '',
@@ -905,6 +966,7 @@
                 if (!force && serialized === lastSyncedSnapshot) return;
 
                 await setDoc(doc(db, "users", user.uid), {
+                    ownerName: payload.ownerName,
                     email: user.email,
                     appData: payload,
                     updatedAt: new Date().toISOString()
@@ -921,25 +983,54 @@
                 if (typeof window.showToast === "function") {
                     window.showToast(NO_INTERNET_MSG);
                 }
-                return null;
+                return { ok: false, data: null };
             }
             try {
-                const docPromise = getDoc(doc(db, "users", uid));
-                const timeoutPromise = new Promise((resolve) => setTimeout(() => resolve(null), 8000));
-                const snap = await Promise.race([docPromise, timeoutPromise]);
+                const snap = await getDoc(doc(db, "users", uid));
                 if (snap && snap.exists()) {
                     const docData = snap.data();
-                    if (docData.appData) return docData.appData;
-                    if (docData.records && typeof docData.records === 'object') return docData.records;
+                    const appObj = docData.appData || (docData.records && typeof docData.records === 'object' ? docData.records : null);
+                    if (appObj && !appObj.ownerName && docData.ownerName) {
+                        appObj.ownerName = docData.ownerName;
+                    }
+                    return { ok: true, data: appObj };
                 }
-                return null;
+                return { ok: true, data: null };
             } catch (err) {
                 console.error("Firestore fetch error:", err);
-                return null;
+                return { ok: false, data: null };
             }
         };
 
+        async function hydrateFromCloudForUser(user, regProfile = null) {
+            isLoadingFromCloud = true;
+            isCloudHydrated = false;
+            try {
+                const res = await window.fetchAppDataFromFirestore(user.uid);
+                let finalData = res.ok ? res.data : null;
+                if (regProfile) {
+                    finalData = {
+                        ...(finalData || {}),
+                        ownerName: regProfile.ownerName || (finalData && finalData.ownerName) || '',
+                        businessName: regProfile.businessName || (finalData && finalData.businessName) || 'Broiler & Ledger Pro',
+                        businessAddress: regProfile.businessAddress || (finalData && finalData.businessAddress) || 'Swarupnagar, North 24 Parganas',
+                        gmailBackupId: user.email || ''
+                    };
+                }
+                if (typeof window.applyCloudAppData === "function") {
+                    window.applyCloudAppData(finalData, user.email, Boolean(regProfile));
+                }
+                isCloudHydrated = true;
+                if (regProfile && hasInternetConnection()) {
+                    await window.syncAppDataToFirestore(window.getCurrentAppData(), true);
+                }
+            } finally {
+                isLoadingFromCloud = false;
+            }
+        }
+
         window.logoutCloudAccount = async function() {
+            isCloudHydrated = false;
             lastSyncedSnapshot = "";
             await signOut(auth);
             showLoginScreen();
@@ -966,7 +1057,7 @@
 
         // Every-moment background auto-upload listener
         setInterval(() => {
-            if (auth.currentUser && hasInternetConnection() && typeof window.getCurrentAppData === 'function') {
+            if (auth.currentUser && isCloudHydrated && !isLoadingFromCloud && hasInternetConnection() && typeof window.getCurrentAppData === 'function') {
                 const current = window.getCurrentAppData();
                 window.syncAppDataToFirestore(current, false);
             }
@@ -985,10 +1076,7 @@
                 const cred = await signInWithEmailAndPassword(auth, email, password);
                 statusEl.textContent = "";
                 hideLoginScreenAndOpenMain();
-                const cloudData = await window.fetchAppDataFromFirestore(cred.user.uid);
-                if (typeof window.applyCloudAppData === "function") {
-                    window.applyCloudAppData(cloudData, cred.user.email);
-                }
+                await hydrateFromCloudForUser(cred.user, null);
             } catch (err) {
                 if (!hasInternetConnection()) {
                     statusEl.textContent = NO_INTERNET_MSG;
@@ -1000,20 +1088,36 @@
 
         document.getElementById('btn-cloud-register').addEventListener('click', async () => {
             if (!checkInternetOrAlert()) return;
-            const email = emailInput.value.trim();
-            const password = passInput.value;
-            if (!email || password.length < 6) {
-                statusEl.textContent = "Enter a valid Email ID and password (min 6 chars).";
+            const ownerName = document.getElementById('reg-name').value.trim();
+            const businessName = document.getElementById('reg-business-name').value.trim();
+            const address = document.getElementById('reg-address').value.trim();
+            const email = document.getElementById('reg-email').value.trim();
+            const password = document.getElementById('reg-password').value;
+            const confirmPassword = document.getElementById('reg-confirm-password').value;
+
+            if (!ownerName || !businessName || !address || !email || !password || !confirmPassword) {
+                statusEl.textContent = "Please fill in all required fields.";
                 return;
             }
+            if (password.length < 6) {
+                statusEl.textContent = "Password must be at least 6 characters.";
+                return;
+            }
+            if (password !== confirmPassword) {
+                statusEl.textContent = "Password and Confirm Password do not match.";
+                return;
+            }
+
             statusEl.textContent = "Creating account...";
             try {
                 const cred = await createUserWithEmailAndPassword(auth, email, password);
                 statusEl.textContent = "";
                 hideLoginScreenAndOpenMain();
-                if (typeof window.applyCloudAppData === "function") {
-                    window.applyCloudAppData(null, cred.user.email);
-                }
+                await hydrateFromCloudForUser(cred.user, {
+                    ownerName,
+                    businessName,
+                    businessAddress: address
+                });
                 if (typeof window.showToast === "function") {
                     window.showToast("Account created successfully!");
                 }
@@ -1021,7 +1125,7 @@
                 if (!hasInternetConnection()) {
                     statusEl.textContent = NO_INTERNET_MSG;
                 } else if (err.code === 'auth/email-already-in-use') {
-                    statusEl.textContent = "Email ID and Password already exists";
+                    statusEl.textContent = "Email ID is already in use.";
                 } else {
                     statusEl.textContent = "Unable to create account. Please try again.";
                 }
@@ -1032,11 +1136,9 @@
             if (user) {
                 statusEl.textContent = "";
                 hideLoginScreenAndOpenMain();
-                const cloudData = await window.fetchAppDataFromFirestore(user.uid);
-                if (typeof window.applyCloudAppData === "function") {
-                    window.applyCloudAppData(cloudData, user.email);
-                }
+                await hydrateFromCloudForUser(user, null);
             } else {
+                isCloudHydrated = false;
                 showLoginScreen();
             }
         });
@@ -1045,6 +1147,7 @@
     <!-- JavaScript Application Logic -->
     <script>
         let appData = {
+            ownerName: '',
             businessName: 'Broiler & Ledger Pro',
             businessAddress: 'Swarupnagar, North 24 Parganas',
             gmailBackupId: '',
@@ -1063,11 +1166,51 @@
         let selectedTransactionIds = new Set();
         let selectedBinIds = new Set();
 
+        window.openAuthView = function(view) {
+            const choiceView = document.getElementById('auth-choice-view');
+            const loginView = document.getElementById('auth-login-view');
+            const registerView = document.getElementById('auth-register-view');
+            const subtitle = document.getElementById('auth-subtitle');
+            const statusEl = document.getElementById('cloud-auth-status');
+
+            if (statusEl) statusEl.textContent = "";
+            choiceView.classList.add('hidden');
+            loginView.classList.add('hidden');
+            registerView.classList.add('hidden');
+
+            if (view === 'login') {
+                loginView.classList.remove('hidden');
+                if (subtitle) subtitle.textContent = "Sign in with your Email ID and Password";
+            } else if (view === 'register') {
+                registerView.classList.remove('hidden');
+                if (subtitle) subtitle.textContent = "Create your account and business profile";
+            } else {
+                choiceView.classList.remove('hidden');
+                if (subtitle) subtitle.textContent = "Choose an option to continue";
+            }
+        };
+
+        window.toggleInputEye = function(inputId) {
+            const el = document.getElementById(inputId);
+            if (!el) return;
+            el.type = el.type === 'password' ? 'text' : 'password';
+        };
+
+        window.confirmAndLogoutCloudAccount = function() {
+            openConfirmModal("Are you sure you want to logout from your account?", async () => {
+                if (typeof window.logoutCloudAccount === "function") {
+                    await window.logoutCloudAccount();
+                }
+            });
+        };
+
         window.getCurrentAppData = function() {
             return appData;
         };
 
         function hydrateSettingsInputs() {
+            const ownerEl = document.getElementById('settings-owner-name');
+            if (ownerEl) ownerEl.value = appData.ownerName || '';
             document.getElementById('settings-business-name').value = appData.businessName || 'Broiler & Ledger Pro';
             document.getElementById('settings-business-address').value = appData.businessAddress || '';
             document.getElementById('settings-gmail-id').value = appData.gmailBackupId || '';
@@ -1077,10 +1220,11 @@
             updateProfileAvatarUI();
         }
 
-        window.applyCloudAppData = function(cloudData, userEmail) {
+        window.applyCloudAppData = function(cloudData, userEmail, skipSync = false) {
             const existingLocalPhoto = appData.profilePhoto || '';
             if (cloudData) {
                 appData = {
+                    ownerName: cloudData.ownerName || appData.ownerName || '',
                     businessName: cloudData.businessName || 'Broiler & Ledger Pro',
                     businessAddress: cloudData.businessAddress || 'Swarupnagar, North 24 Parganas',
                     gmailBackupId: cloudData.gmailBackupId || userEmail || '',
@@ -1098,7 +1242,7 @@
                     appData.gmailBackupId = userEmail;
                 }
                 localStorage.setItem('broiler_pro_app_data', JSON.stringify(appData));
-                if (typeof window.syncAppDataToFirestore === 'function') {
+                if (!skipSync && typeof window.syncAppDataToFirestore === 'function') {
                     window.syncAppDataToFirestore(appData, true);
                 }
             }
@@ -1146,7 +1290,38 @@
             return bal;
         }
 
-        // Cordova PDF Save, Open & Share Helper (Compatible with any PDF Viewer)
+        // Open generated PDF in Google Drive (with PDF Viewer / Share fallback)
+        function openPdfInGoogleDrive(fileUrl, safeFilename) {
+            const driveIntentUrl = `intent:${fileUrl}#Intent;package=com.google.android.apps.docs;type=application/pdf;end`;
+            if (window.cordova && window.cordova.plugins && window.cordova.plugins.fileOpener2) {
+                window.cordova.plugins.fileOpener2.showOpenWithDialog(
+                    fileUrl,
+                    'application/pdf',
+                    {
+                        success: function() {},
+                        error: function() {
+                            try {
+                                window.open(driveIntentUrl, '_system');
+                            } catch (e) {
+                                if (window.plugins && window.plugins.socialsharing && typeof window.plugins.socialsharing.share === 'function') {
+                                    window.plugins.socialsharing.share('Open PDF in Google Drive', safeFilename, fileUrl, null);
+                                }
+                            }
+                        }
+                    }
+                );
+            } else {
+                try {
+                    window.open(driveIntentUrl, '_system');
+                } catch (e) {
+                    if (window.plugins && window.plugins.socialsharing && typeof window.plugins.socialsharing.share === 'function') {
+                        window.plugins.socialsharing.share('Open PDF in Google Drive', safeFilename, fileUrl, null);
+                    }
+                }
+            }
+        }
+
+        // Cordova PDF Save, Open in Google Drive & Share Helper
         function saveAndSharePDF(printDiv, filename, successMsg) {
             const safeFilename = filename.toLowerCase().endsWith('.pdf') ? filename : `${filename}.pdf`;
             document.body.appendChild(printDiv);
@@ -1191,25 +1366,7 @@
                         fileEntry.createWriter(function(fileWriter) {
                             fileWriter.onwriteend = function() {
                                 showToast(successMsg);
-                                const fileUrl = fileEntry.nativeURL;
-
-                                if (window.cordova && window.cordova.plugins && window.cordova.plugins.fileOpener2) {
-                                    window.cordova.plugins.fileOpener2.open(
-                                        fileUrl,
-                                        'application/pdf',
-                                        {
-                                            success: function() {},
-                                            error: function(err) {
-                                                console.warn('fileOpener2 error, falling back to share:', err);
-                                                if (window.plugins && window.plugins.socialsharing && typeof window.plugins.socialsharing.share === 'function') {
-                                                    window.plugins.socialsharing.share('PDF Report', safeFilename, fileUrl, null);
-                                                }
-                                            }
-                                        }
-                                    );
-                                } else if (window.plugins && window.plugins.socialsharing && typeof window.plugins.socialsharing.share === 'function') {
-                                    window.plugins.socialsharing.share('PDF Report', safeFilename, fileUrl, null);
-                                }
+                                openPdfInGoogleDrive(fileEntry.nativeURL, safeFilename);
                             };
                             fileWriter.onerror = function(e) {
                                 console.error('FileWriter error:', e);
@@ -1299,6 +1456,7 @@
             const overlay = document.getElementById('drawer-overlay');
             const menu = document.getElementById('drawer-menu');
             if (menu.classList.contains('-translate-x-full')) {
+                updateBusinessNameUI();
                 overlay.classList.remove('hidden');
                 setTimeout(() => menu.classList.remove('-translate-x-full'), 10);
             } else {
@@ -1423,6 +1581,7 @@
                 try {
                     const parsed = JSON.parse(data);
                     appData = {
+                        ownerName: parsed.ownerName || '',
                         businessName: parsed.businessName || 'Broiler & Ledger Pro',
                         businessAddress: parsed.businessAddress || 'Swarupnagar, North 24 Parganas',
                         gmailBackupId: parsed.gmailBackupId || '',
@@ -1439,6 +1598,7 @@
                 }
             } else {
                 appData = {
+                    ownerName: '',
                     businessName: 'Broiler & Ledger Pro',
                     businessAddress: 'Swarupnagar, North 24 Parganas',
                     gmailBackupId: '',
@@ -1457,6 +1617,11 @@
         function updateBusinessNameUI() {
             const name = appData.businessName || 'Broiler & Ledger Pro';
             document.getElementById('header-business-name').innerText = name;
+            const greetingEl = document.getElementById('drawer-user-greeting');
+            if (greetingEl) {
+                const displayUser = (appData.ownerName && appData.ownerName.trim()) ? appData.ownerName.trim() : 'User';
+                greetingEl.innerText = `Hi, ${displayUser}`;
+            }
             const menuName = document.getElementById('drawer-business-name-display');
             if (menuName) menuName.innerText = name;
             const pdfTitle = document.getElementById('pdf-business-title');
@@ -1482,27 +1647,73 @@
             updateSplashLogoUI();
         }
 
+        // Compress logo to clean, sharp KB size (~120-200 KB) without losing clarity
+        function compressLogoToKB(file, callback) {
+            const reader = new FileReader();
+            reader.onload = function(uploadEvent) {
+                const img = new Image();
+                img.onload = function() {
+                    const maxDim = 512;
+                    let width = img.width;
+                    let height = img.height;
+
+                    if (width > height && width > maxDim) {
+                        height = Math.round((height * maxDim) / width);
+                        width = maxDim;
+                    } else if (height > maxDim) {
+                        width = Math.round((width * maxDim) / height);
+                        height = maxDim;
+                    }
+
+                    const canvas = document.createElement('canvas');
+                    canvas.width = width || 256;
+                    canvas.height = height || 256;
+                    const ctx = canvas.getContext('2d');
+                    ctx.imageSmoothingEnabled = true;
+                    ctx.imageSmoothingQuality = 'high';
+                    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+                    let quality = 0.88;
+                    let dataUrl = canvas.toDataURL('image/jpeg', quality);
+                    const approxBytes = (url) => Math.round((url.split(',')[1].length * 3) / 4);
+
+                    while (approxBytes(dataUrl) > 220 * 1024 && quality > 0.55) {
+                        quality -= 0.06;
+                        dataUrl = canvas.toDataURL('image/jpeg', quality);
+                    }
+
+                    const finalKB = (approxBytes(dataUrl) / 1024).toFixed(1);
+                    callback(dataUrl, finalKB);
+                };
+                img.src = uploadEvent.target.result;
+            };
+            reader.readAsDataURL(file);
+        }
+
         function handleProfilePhotoUpload(e) {
             const file = e.target.files[0];
             if (file) {
-                const reader = new FileReader();
-                reader.onload = function(uploadEvent) {
-                    appData.profilePhoto = uploadEvent.target.result;
+                compressLogoToKB(file, function(compressedDataUrl, finalKB) {
+                    appData.profilePhoto = compressedDataUrl;
+                    const kbInfo = document.getElementById('settings-logo-kb-info');
+                    if (kbInfo) kbInfo.innerText = `Optimized size: ${finalKB} KB (High clarity)`;
                     saveToLocalStorage();
                     updateProfileAvatarUI();
-                    showToast('Profile photo updated successfully!');
-                };
-                reader.readAsDataURL(file);
+                    showToast(`Profile logo saved (${finalKB} KB)!`);
+                });
             }
         }
 
         function saveBusinessName() {
+            const ownerEl = document.getElementById('settings-owner-name');
+            let ownerInput = ownerEl ? ownerEl.value.trim() : (appData.ownerName || '');
             let nameInput = document.getElementById('settings-business-name').value.trim();
             let addressInput = document.getElementById('settings-business-address').value.trim();
             if (!nameInput) {
                 showToast('Business name cannot be empty!');
                 return;
             }
+            appData.ownerName = ownerInput;
             appData.businessName = nameInput;
             appData.businessAddress = addressInput;
             saveToLocalStorage();
@@ -1562,9 +1773,9 @@
                     const authModule = await import("https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js");
                     const user = authModule.getAuth().currentUser;
                     if (user) {
-                        const cloudData = await window.fetchAppDataFromFirestore(user.uid);
-                        if (cloudData) {
-                            window.applyCloudAppData(cloudData, user.email);
+                        const res = await window.fetchAppDataFromFirestore(user.uid);
+                        if (res && res.ok && res.data) {
+                            window.applyCloudAppData(res.data, user.email);
                             return;
                         }
                     }
@@ -3014,6 +3225,7 @@
                         const parsed = JSON.parse(e.target.result);
                         if (parsed.customers && parsed.sales) {
                             appData = {
+                                ownerName: parsed.ownerName || appData.ownerName || '',
                                 businessName: parsed.businessName || 'Broiler & Ledger Pro',
                                 businessAddress: parsed.businessAddress || 'Swarupnagar, North 24 Parganas',
                                 gmailBackupId: parsed.gmailBackupId || '',
